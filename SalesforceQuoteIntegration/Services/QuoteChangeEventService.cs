@@ -73,7 +73,7 @@ public class QuoteChangeEventService
         _lastConnectAt = DateTime.UtcNow;
         _bayeuxClient.GetChannel("/meta/handshake").AddListener(new MetaHandshakeListener());
         _bayeuxClient.GetChannel("/meta/connect").AddListener(new MetaConnectListener(this));
-
+        _bayeuxClient.GetChannel("/meta/subscribe").AddListener(new MetaSubscribeListener());
         _bayeuxClient.Handshake();
 
         BayeuxClient.State state = _bayeuxClient.WaitFor(15000, new[] { BayeuxClient.State.CONNECTED });
@@ -158,6 +158,23 @@ public class QuoteChangeEventService
         }
     }
 
+    private class MetaSubscribeListener : IMessageListener
+    {
+        public void OnMessage(IClientSessionChannel channel, IMessage message)
+        {
+            if (message.Successful)
+            {
+                Log.Information($"Subscribe confirmed: {message.Channel} | subscription: {message["subscription"]}");
+            }
+            else
+            {
+                var error = message.ContainsKey("error") ? message["error"]?.ToString() : "none";
+                var advice = message.ContainsKey("advice") ? message["advice"]?.ToString() : "none";
+                Log.Error($"Subscribe FAILED: {message["subscription"]} | Error: {error} | Advice: {advice}");
+            }
+        }
+    }
+
     private class MetaConnectListener : IMessageListener
     {
         private readonly QuoteChangeEventService _parent;
@@ -217,7 +234,7 @@ public class QuoteChangeEventService
 
         public void OnMessage(IClientSessionChannel channel, IMessage message)
         {
-            Log.Debug($"[{_entityType}] Raw message received: {message.Json}");
+            Log.Information($"[{_entityType}] Raw message received: {message.Json}");
             try
             {
                 var json      = JsonConvert.SerializeObject(message.Data);
