@@ -188,22 +188,21 @@ order by e.eqprecdt
 ");
                         if (recs.Count > 0)
                         {
-                            kequipnum = recs[0]["kequipnum"]?.ToString() ?? "";
-                            pr.ProductCode = kequipnum;
+                            pr.ProductCode = recs[0]["kmfg"]?.ToString() ?? "";
                             pr.Description = recs[0]["udesc"]?.ToString() ?? pr.Description;
                             pr.QuoteLineItemId = line.Id;
                             pr.UnitPrice = line.UnitPrice;
                             pr.Quantity = line.Quantity;
                             products2.Add(pr);
-                            Log.Information($"Found available equipment {kequipnum} for quote {chrec.Name} ({chrec.SalesforceRecordId})");
+                            Log.Information($"Found available service charge {(recs[0]["kmfg"]?.ToString() ?? "")} for quote {chrec.Name} ({chrec.SalesforceRecordId})");
                         }
                         else
                         {
                             //RYAN - TODO - alert user
                             kequipnum = "";
                             products2.Add(pr);
-                            Log.Error($"No available equipment found for quote {chrec.Name} ({chrec.SalesforceRecordId})");
-                            await _storageService.MarkAsProcessedAsync(chrec.Id, error: $"No available equipment found for quote {chrec.Name} ({chrec.SalesforceRecordId})");
+                            Log.Error($"Service charge pricing not found for quote {chrec.Name} ({chrec.SalesforceRecordId})");
+                            await _storageService.MarkAsProcessedAsync(chrec.Id, error: $"Service charge pricing not found for quote {chrec.Name} ({chrec.SalesforceRecordId})");
                             return true;
                         }
                     }
