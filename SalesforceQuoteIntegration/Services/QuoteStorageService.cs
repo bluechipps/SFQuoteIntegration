@@ -229,12 +229,27 @@ public class QuoteStorageService
 
             foreach (var sfo in lstsfo)
             {
-                var rec = await db.sfQuoteLineItem.FirstOrDefaultAsync(q => q.Id == sfo.Id);
-                if (rec != null)
+                var localQuoteItemRec = await db.sfQuoteLineItem.FirstOrDefaultAsync(q => q.Id == sfo.Id);
+                if (localQuoteItemRec != null)
                 {
-                    //This shouldnt overwrite reserved equip ids if they are already set, so we can just save all incoming line items and let the db handle the rest
-                    sfo.sfQuoteLineItem_id = rec.sfQuoteLineItem_id;
-                    db.Entry(rec).CurrentValues.SetValues(sfo);
+                    sfo.sfQuoteLineItem_id = localQuoteItemRec.sfQuoteLineItem_id;
+
+                    //RYAN - First check for reserved equip ids and un-reserve them before removing the line item record
+                    if (localQuoteItemRec.ReservedEquipIds != null && localQuoteItemRec.ReservedEquipIds.Length > 0)
+                    {
+                        localQuoteItemRec.ReservedEquipIds.Split(',').ToList().ForEach(async eqid =>
+                        {
+                            Log.Information($"Un-reserving {eqid} for sfQuoteLineItem {localQuoteItemRec.Id} due to line item being deleted.");
+                            string updatedReserved = await _rawSql.ExecuteStoredProcedureScalarAsync<string>(
+                                "dbo.sp_ebs_sf_update_reservations",
+                                new SqlParameter("@lineId", localQuoteItemRec.Id)
+                            ) ?? "";
+                        });
+                    }
+
+
+                    db.Entry(localQuoteItemRec).CurrentValues.SetValues(sfo);
+                    
                 }
                 else
                 {
@@ -601,7 +616,7 @@ public class QuoteStorageService
         await using var db = await _dbContextFactory.CreateDbContextAsync();
 
         return await db.ChangeEvents
-            .Where(q => q.EntityType == "Quote" && q.Status == "Approved" && !q.IsProcessed && q.ProcessingError == null)
+            .Where(q => q.EntityType == "Quote" && q.Status == "Accepted" && !q.IsProcessed && q.ProcessingError == null)
             .OrderBy(q => q.ReceivedAt)
             .ToListAsync();
     }
@@ -610,7 +625,7 @@ public class QuoteStorageService
         await using var db = await _dbContextFactory.CreateDbContextAsync();
 
         var oldestUnprocessed = await db.ChangeEvents
-            .Where(q => q.EntityType == "Quote" && q.Status == "Approved" && !q.IsProcessed && q.ProcessingError == null)
+            .Where(q => q.EntityType == "Quote" && q.Status == "Accepted" && !q.IsProcessed && q.ProcessingError == null)
             .OrderBy(q => q.ReceivedAt)
             .Select(q => new
             {

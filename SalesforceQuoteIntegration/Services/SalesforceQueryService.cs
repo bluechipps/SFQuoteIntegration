@@ -144,28 +144,6 @@ public class SalesforceQueryService
             return false;
         }
 
-        //decimal? ToDec(object? v) => v is null || v == DBNull.Value ? null : Convert.ToDecimal(v);
-
-        //ChangeEventRecord? chrec;
-        //try
-        //{
-        //    chrec = await _storageService.GetNextUnprocessedChangeAsync();
-        //    if (chrec != null)
-        //    {
-        //        Log.Information($"Quote {chrec.Name} ({chrec.SalesforceRecordId}) — ready to process.");
-        //    }
-        //    else
-        //    {
-        //        Log.Information($"No unprocessed quote records found.");
-        //        return false;
-        //    }
-        //}
-        //catch (Exception ex)
-        //{
-        //    Log.Error($"Critical error retrieving unprocessed Quote change event: {ex.Message}\r\n{ex.StackTrace}");
-        //    return true;
-        //}
-
         try
         {
             var rechead = await _storageService.GetQuoteByIdAsync(chrec.SalesforceRecordId);
@@ -192,14 +170,13 @@ public class SalesforceQueryService
             List<sfProduct2custom> products2 = [];
             foreach (var line in recdet)
             {
-                Log.Information($"Quote {chrec.Name} ({chrec.SalesforceRecordId}) line item: {line.Product2Id} | Qty: {line.Quantity} | Price: {line.UnitPrice}");
+                Log.Information($"Quote {chrec.Name} ({chrec.SalesforceRecordId}) line item: {line.Product2Id} | Qty: {line.Quantity} | ReservedIds: {line.ReservedEquipIds ?? ""} | Price: {line.UnitPrice}");
                 sfProduct2? prd = await _storageService.GetProductByIdAsync(line.Product2Id);
                 if (prd != null)
                 {
                     sfProduct2custom pr = _mapper.Map<sfProduct2custom>(prd);
 
-                    //RYAN - TODO - add misc support
-                    if (pr.Family == "Misc Charges")
+                    if (pr.Family == "Service Charges")
                     {
                         var recs = await _rawSql.ExecuteReaderAsync(@$"
 select top 1 *
@@ -232,59 +209,38 @@ order by e.eqprecdt
                     }
                     else
                     {
-                        var recs = await _rawSql.ExecuteReaderAsync(@$"
-;with qry as (
-    select top 1 COALESCE(e.kequipnum, e2.kequipnum) as kequipnum, u.udesc as udesc
-    from sfProduct2 p 
-    inner join utgrpprod u on p.Product_Group__c = u.eqpigrp and p.Product_Code__c = u.gmmottype
-    outer apply (
-	    select top 1 * 
-	    from equip 
-	    where eqpigrp = u.eqpigrp 
-		    and gmmottype = u.gmmottype 
-		    and eqpstatus = 'AV'
-		    and eqpphybr = '{rechead.Branch__c}'
-    ) e
-    outer apply (
-	    select top 1 * 
-	    from equip 
-	    where eqpigrp = u.eqpigrp 
-		    and gmmottype = u.gmmottype 
-		    and eqpstatus = 'AV'
-		    and eqpphybr <> '{rechead.Branch__c}'
-    ) e2
-    where p.Id = '{pr.Id}'
-    order by e.eqprecdt
-)
-select top 1 e.*, q.udesc
-from equip e
-inner join qry q on e.kequipnum = q.kequipnum
-");
-                        if (recs.Count > 0)
+                        if (line.ReservedEquipIds != null && line.ReservedEquipIds.Length > 0)
                         {
-                            kequipnum = recs[0]["kequipnum"]?.ToString() ?? "";
-                            pr.ProductCode = kequipnum;
-                            pr.Description = recs[0]["udesc"]?.ToString() ?? pr.Description;
-                            pr.QuoteLineItemId = line.Id;
-                            pr.UnitPrice = line.UnitPrice;
-                            pr.Quantity = line.Quantity;
-                            //pr.UnitPrice = ToDec(recs[0]["UnitPrice"]) ?? pr.UnitPrice;
-                            //pr.Quantity = ToDec(recs[0]["Quantity"]) ?? pr.Quantity;
-                            //pr.QuoteLineItemId = recs[0]["QuoteLineItemId"]?.ToString() ?? pr.QuoteLineItemId;
-                            products2.Add(pr);
-                            Log.Information($"Found available equipment {kequipnum} for quote {chrec.Name} ({chrec.SalesforceRecordId})");
+                            List<string> reservedIds = [];
+                            reservedIds = (line.ReservedEquipIds ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(id => id.Trim()).ToList();
+                            if (reservedIds.Count == line.Quantity)
+                            {
+                                foreach (var kequip in reservedIds)
+                                {
+                                    pr.ProductCode = kequip;
+                                    pr.QuoteLineItemId = line.Id;
+                                    pr.UnitPrice = line.UnitPrice;
+                                    pr.Quantity = (decimal)1.0;
+                                    products2.Add(pr);
+                                    Log.Information($"Using previously reserved equipment id {kequip} for quote {chrec.Name} ({chrec.SalesforceRecordId})");
+                                }
+                            }
+                            else
+                            {
+                                Log.Error($"Reserved equipment IDs count ({reservedIds.Count}) does not match line item quantity ({line.Quantity}) for quote {chrec.Name} ({chrec.SalesforceRecordId}). Probably not enough available products of this category between all branches.");
+                                //RYAN - TODO - alert user
+                                await _storageService.MarkAsProcessedAsync(chrec.Id, error: $"Reserved equipment IDs count ({reservedIds.Count}) does not match line item quantity ({line.Quantity}) for quote {chrec.Name} ({chrec.SalesforceRecordId}). Probably not enough available products of this category between all branches.");
+                                return true;
+                            }
                         }
                         else
                         {
                             //RYAN - TODO - alert user
-                            kequipnum = "";
-                            products2.Add(pr);
-                            Log.Error($"No available equipment found for quote {chrec.Name} ({chrec.SalesforceRecordId})");
-                            await _storageService.MarkAsProcessedAsync(chrec.Id, error: $"No available equipment found for quote {chrec.Name} ({chrec.SalesforceRecordId})");
+                            Log.Error($"No reserved equipment IDs found for quote {chrec.Name} ({chrec.SalesforceRecordId}) line item {line.Id}. Probably not enough available products of this category between all branches.");
+                            await _storageService.MarkAsProcessedAsync(chrec.Id, error: $"No reserved equipment IDs found for quote {chrec.Name} ({chrec.SalesforceRecordId}) line item {line.Id}. Probably not enough available products of this category between all branches.");
                             return true;
                         }
                     }
-                    
                 }
                 else
                 {
@@ -326,7 +282,22 @@ END CATCH
             int itemnum = 1;
             foreach (var p in products2)
             {
-                sqlProducts += $@"
+                if (p.Family == "Service Charges")
+                {
+                    //RYAN - TODO - not done yet
+                    sqlProducts += $@"
+;with c as (
+	select top 1 * from custmast where kcustnum = '{rechead.EBS_Customer_ID__c}' and custsnum = '000'
+)
+INSERT INTO wk_oed01_admin99999_88888 ([kdeleteflg],[oeptype],[oepordnum],[ktermid] ,[kbranch],            [key_3_a1],[kmfg],[kpart]                 ,[custpcl],[custrcl],[custecl],[custlcl],[oepqtyord],[oeqtyship],[pmdesc],[iclocmain], [key_8_a1],                   [key_8_a101],[key_8_a102],[icstatus],[oepsell],    [oetrancode],[oetaxex],[iccost],[pmcommod],[pmum],[kordnum],   [oefrexecpt],[oenetdtl],[oefactor],[icdlrcl],[iclocsec],                 [icqtyonord],[pmret],[eqpmeter],[eqpmeter01],[pmrep],[pmmcl],[pmpriceid],[artotal],[artotal01],[artotal02],[artotal03],[artotal04],[artotal05],[artotal06],[artotal07],[artotal08],[artotal09],[artotal10],[artotal11],[oeitemnum],[icbrchg],[dummy],[dummy01],[dummy02],[dummy03],[dummy04],[dummy05],[dummy06],[dummy07],[dummy08],[dummy09],[oerentot],[oerenthr],[oerentwk] ,[oerentday],[oerentmnth],[kmodel],[date1]                                                      ,[apdateons]                                       ,[eqpigrp],                   [oecomplete],[action],[shift],[key_4_a1],[uprpromrt],[uprpromr01],[uprpromr02],[uprpromr03],[uprpromr04],[uprpromr05],[uprpromr06],[uprpromr07],[uprpromr08],[uprpromr09],[wonotes],[oeshipclas],[glco1],[glacct1],[glbr1],[gldpt1],[recnum],[recnum01],[recnum02],[recnum03],[recnum04],[recnum05],[recnum06],[recnum07],[recnum08],[recnum09],[key_10_a1],[key_10_a01],[key_10_a02],[key_10_a03],[key_10_a04],[key_10_a05],[key_10_a06],[key_10_a07],[key_10_a08],[key_10_a09],[key_2_a1],[key_2_a101],[key_2_a102],[key_2_a103],[key_2_a104],[key_2_a105],[key_2_a106],[key_2_a107],[key_2_a108],[key_2_a109],[amtlast],[amtlast01],[amtlast02],[amtlast03],[amtlast04],[amtlast05],[amtlast06],[amtlast07],[amtlast08],[amtlast09],[curractdt],[curractd01],[curractd02],[curractd03],[curractd04],[curractd05],[curractd06],[curractd07],[curractd08],[curractd09],[pmset])
+SELECT                                 'N'         ,'2'      ,1          ,'admin999','{rechead.Branch__c}','YES'     ,''    ,'{p.ProductCode ?? ""}',''        ,c.custrcl,''       ,''       ,1          ,1          ,u.udesc ,''          ,'{p.Product_Code__c ?? ""}'  ,''          ,''          ,''        ,{p.UnitPrice},''          ,''       ,0       ,''        ,''    ,{newKordnum},''          ,''        ,'N'       ,''       ,'{p.Product_Code__c ?? ""}',0           ,''     ,'0'       ,'0'         ,''     ,''     ,'0'        ,0        ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,{itemnum}  ,''       ,''     ,''       ,''       ,''       ,''       ,''       ,''       ,''       ,''       ,''       ,0         ,0         ,0          ,0          ,0           ,''     ,'{rechead.Date__c?.AddDays(28).ToString("yyyyMMdd HH:mm:ss")}','{rechead.Date__c?.ToString("yyyyMMdd HH:mm:ss")}','{p.Product_Group__c ?? ""}','R'         ,'4'     ,'R'    ,''        ,0           ,0           ,0 ,0           ,0           ,0           ,0           ,0           ,0           ,p.uamount   ,''       ,''          ,''     ,''       ,''     ,''      ,1       ,0         ,0         ,0         ,0         ,0         ,0         ,0         ,0         ,0         ,''         ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''        ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,0        ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,NULL       ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,'0'
+FROM c
+CROSS APPLY ( select top 1 udesc from utgrpprod where eqpigrp = '{p.Product_Group__c ?? ""}' and gmmottype = '{p.Product_Code__c ?? ""}') u
+";
+                }
+                else
+                {
+                    sqlProducts += $@"
 DELETE FROM #pricing
 INSERT INTO #pricing
     exec sp_ebs_rental_pricing @kcustnum='{rechead.EBS_Customer_ID__c}',@custsnum='000',@kbranch='{rechead.Branch__c}',@equipid='{p.ProductCode}'
@@ -340,9 +311,8 @@ FROM c
 CROSS APPLY ( select top 1 * from equip where kequipnum = '{p.ProductCode}') e
 CROSS APPLY ( select top 1 udesc from utgrpprod where eqpigrp = '{p.Product_Group__c ?? ""}' and gmmottype = '{p.Product_Code__c ?? ""}') u
 OUTER APPLY ( select top 1 * from #pricing ) p
-
-
 ";
+                }
                 itemnum++;
             }
 
@@ -541,7 +511,6 @@ SET NOCOUNT OFF
                         {
                             sfo2 = lineItem.ToObject<sfQuoteLineItem>();
                             items.Add(sfo2);
-                            //Log.Information($"Saved {sfo.GetType().Name} {changeRecord.SalesforceRecordId} to database");
                         }
                         catch (Exception ex)
                         {

@@ -288,12 +288,25 @@ IF COL_LENGTH('sfQuoteLineItem','ReservedEquipIds') IS NULL
 CREATE OR ALTER PROCEDURE sp_ebs_unreserve_equip (@kequipnum VARCHAR(12), @lineId nvarchar(18))
 AS
 BEGIN
-	insert into sfEquipStatusChanges (Id, kequipnum, NewStatus, OldStatus, ModifiedDate)
-		select top 1 @lineId, @kequipnum, 'AV', e.eqpstatus, getdate()
-		from equip e 
-		where e.kequipnum = @kequipnum
-
-	UPDATE equip SET eqpstatus='AV' WHERE kequipnum = @kequipnum and eqpstatus = 'RE'
+	DECLARE @ret int = 0
+	SET XACT_ABORT ON
+	BEGIN TRY
+		BEGIN TRANSACTION
+			insert into sfEquipStatusChanges (Id, kequipnum, NewStatus, OldStatus, ModifiedDate)
+				select top 1 @lineId, @kequipnum, 'AV', e.eqpstatus, getdate()
+				from equip e 
+				where e.kequipnum = @kequipnum
+			;WITH equipView AS (select top 1 * from equip WHERE kequipnum = @kequipnum and eqpstatus = 'RE')
+				UPDATE equipView SET eqpstatus = 'AV'
+		COMMIT TRANSACTION
+		SET @ret = 1
+	END TRY
+	BEGIN CATCH
+		IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION;
+		SET @ret = 0
+	END CATCH
+	SET XACT_ABORT OFF
+	SELECT @ret
 END
 "},
         {"sp_ebs_reserve_equip", @$"
@@ -307,7 +320,148 @@ BEGIN
 
 	UPDATE equip SET eqpstatus='RE' WHERE kequipnum = @kequipnum and eqpstatus = 'AV'
 END
-"}
+"},
+		{"sp_ebs_sf_update_reservations", @$"
+CREATE OR ALTER PROCEDURE sp_ebs_sf_update_reservations (@lineId nvarchar(18))
+AS
+BEGIN
+	DECLARE @ret varchar(max) = ''
+	SET XACT_ABORT ON
+	BEGIN TRY
+		BEGIN TRANSACTION
+			declare @tbl table (kequipnum varchar(12))
+			declare @step int = 0, @steps int = 0
+			declare @ids varchar(max), @qty decimal(12,2) = 0, @pid varchar(18), @branch varchar(3), @status varchar(80)
+
+			select top 1 @ids = NULLIF(ReservedEquipIds,''), 
+				@qty = CASE WHEN IsDeleted = 1 OR q.Status in ('Draft','Needs Review','In review','Rejected','Denied') THEN 0 
+					ELSE Quantity 
+					END, 
+				@pid = Product2Id, 
+				@branch = left(q.Branch__c, 3),
+				@status = q.Status
+			from sfQuoteLineItem 
+			cross apply (select top 1 Status, Branch__c from sfQuote where sfQuoteLineItem.QuoteId = Id) q
+			where Id = @lineId
+			
+			declare @currentequips table (kequipnum varchar(max), rownum int)
+			insert into @currentequips SELECT value, ROW_NUMBER() OVER(ORDER BY (SELECT 0)) as rownum FROM STRING_SPLIT(NULLIF(@ids,''), ',')
+			insert into @tbl           SELECT * FROM STRING_SPLIT(NULLIF(@ids,''), ',')
+
+			set @steps = (select @qty - (select count(*) from @currentequips))
+
+			if (@steps > 0)
+			begin
+				declare @temp table (kequipnum varchar(12))
+				declare @newids table (kequipnum varchar(12))
+				while (@step < @steps)
+				BEGIN
+					delete from @temp
+					;with q as (
+						select top 1 COALESCE(e.kequipnum, e2.kequipnum) as kequipnum
+						from sfProduct2 p 
+						inner join utgrpprod u on p.Product_Group__c = u.eqpigrp and p.Product_Code__c = u.gmmottype
+						outer apply (
+							select top 1 e.kequipnum, e.eqprecdt
+							from equip e
+							left join @tbl t on e.kequipnum = t.kequipnum
+							where eqpigrp = u.eqpigrp 
+								and gmmottype = u.gmmottype 
+								and eqpstatus = 'AV'
+								and eqpphybr = @branch
+								and t.kequipnum IS NULL
+						) e
+						outer apply (
+							select top 1 e.kequipnum, e.eqprecdt
+							from equip e
+							left join @tbl t on e.kequipnum = t.kequipnum
+							where eqpigrp = u.eqpigrp 
+								and gmmottype = u.gmmottype 
+								and eqpstatus = 'AV'
+								and eqpphybr <> @branch
+								and t.kequipnum IS NULL
+						) e2
+						where p.Id = @pid
+						order by e.eqprecdt
+					)
+					insert into @temp select kequipnum from q
+					insert into @tbl select kequipnum from @temp
+					insert into @newids select kequipnum from @temp
+
+					SET @step = @step + 1
+				END
+
+				insert into sfEquipStatusChanges (Id, kequipnum, NewStatus, OldStatus, ModifiedDate)
+					select @lineId, e.kequipnum, 'RE', 'AV', getdate()
+					from @newids e 
+
+				;WITH equipView AS (
+					select e.*
+					from @newids t
+					inner join equip e on t.kequipnum = e.kequipnum
+					WHERE e.eqpstatus = 'AV'
+				)
+				UPDATE equipView SET eqpstatus = 'RE'
+
+
+				select @ret = ISNULL(STRING_AGG(kequipnum, ','),'') from @tbl
+				if (len(@ret) > 0)
+					update sfQuoteLineItem set ReservedEquipIds = @ret
+			end
+			else if (@steps < 0)
+			begin
+				declare @del table (kequipnum varchar(12))
+				delete from @del
+				while (@step > @steps)
+				BEGIN
+					declare @eid varchar(12) = (select top 1 kequipnum from @currentequips order by rownum desc)
+					insert into @del 
+						select @eid
+					delete from @currentequips where kequipnum = @eid
+					SET @step = @step - 1
+				END
+
+				insert into sfEquipStatusChanges (Id, kequipnum, NewStatus, OldStatus, ModifiedDate)
+					select @lineId, d.kequipnum, 'AV', e.eqpstatus, getdate()
+					from @del d 
+					inner join equip e on d.kequipnum = e.kequipnum
+
+				;WITH equipView AS (
+					select e.*
+					from @del t
+					inner join equip e on t.kequipnum = e.kequipnum
+					WHERE e.eqpstatus = 'RE'
+				)
+				UPDATE equipView SET eqpstatus = 'AV'
+
+				declare @strids varchar(max)
+				select @strids = ISNULL(STRING_AGG(c.kequipnum, ','),'') 
+				from @currentequips c
+				left join @del d on d.kequipnum = c.kequipnum
+				where d.kequipnum IS NULL
+
+				if (len(isnull(@strids,'')) > 0)
+					update sfQuoteLineItem set ReservedEquipIds = @strids
+				else
+					update sfQuoteLineItem set ReservedEquipIds = NULL
+
+				select @ret = ISNULL(@strids,'')
+			end
+			else
+			begin
+				select @ret = ISNULL(STRING_AGG(kequipnum, ','),'') from @tbl
+			end
+		COMMIT TRANSACTION
+
+	END TRY
+	BEGIN CATCH
+		IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION;
+		SET @ret = ''
+	END CATCH
+	SET XACT_ABORT OFF
+	SELECT @ret ret
+END
+" }
     };
     using (var scope = app.Services.CreateScope())
     {
