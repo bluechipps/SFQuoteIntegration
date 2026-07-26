@@ -23,8 +23,8 @@ public class QuoteChangeEventService
     {
         ["/data/QuoteChangeEvent"]              = "Quote",
         ["/data/QuoteLineItemChangeEvent"]      = "QuoteLineItem",
-        ["/data/OpportunityChangeEvent"]        = "Opportunity",
-        ["/data/OpportunityLineItemChangeEvent"] = "OpportunityLineItem",
+        //["/data/OpportunityChangeEvent"]        = "Opportunity",
+        //["/data/OpportunityLineItemChangeEvent"] = "OpportunityLineItem",
         ["/data/AccountChangeEvent"] = "Account"
     };
 
@@ -217,6 +217,7 @@ public class QuoteChangeEventService
 
         public void OnMessage(IClientSessionChannel channel, IMessage message)
         {
+            Log.Debug($"[{_entityType}] Raw message received: {message.Json}");
             try
             {
                 var json      = JsonConvert.SerializeObject(message.Data);

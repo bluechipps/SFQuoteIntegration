@@ -458,8 +458,7 @@ SET NOCOUNT OFF
             var results = await QueryAsync(
                 $@"SELECT Id, OwnerId, IsDeleted, Name, CreatedDate, CreatedById, LastModifiedDate, LastModifiedById, SystemModstamp, LastViewedDate, LastReferencedDate, OpportunityId, Pricebook2Id, ContactId, QuoteNumber, IsSyncing, ShippingHandling, Tax, Status, ExpirationDate, Description, Subtotal, TotalPrice, LineItemCount, BillingStreet, BillingCity, BillingState, BillingPostalCode, BillingCountry, BillingLatitude, BillingLongitude, BillingGeocodeAccuracy, ShippingStreet, ShippingCity, ShippingState, ShippingPostalCode, ShippingCountry, ShippingLatitude, ShippingLongitude, ShippingGeocodeAccuracy, QuoteToStreet, QuoteToCity, QuoteToState, QuoteToPostalCode, QuoteToCountry, QuoteToLatitude, QuoteToLongitude, QuoteToGeocodeAccuracy, AdditionalStreet, AdditionalCity, AdditionalState, AdditionalPostalCode, AdditionalCountry, AdditionalLatitude, AdditionalLongitude, AdditionalGeocodeAccuracy, BillingName, ShippingName, QuoteToName, AdditionalName, Email, Phone, Fax, ContractId, AccountId, Discount, GrandTotal, CanCreateQuoteLineItems, Quote_Date__c, Date__c, EBS_Customer_ID__c, Delivery_Date__c, Term_Length_In_Days__c, Rep_Number__c, Branch__c, Invoice__c
                    FROM Quote
-                   WHERE Id = '{changeRecord.SalesforceRecordId}'
-                   ALL ROWS");
+                   WHERE Id = '{changeRecord.SalesforceRecordId}'");
 
             if (results.Count == 0)
             {
@@ -493,8 +492,7 @@ SET NOCOUNT OFF
                     qliresults = await QueryAsync(
         $@"SELECT Id, IsDeleted, LineNumber, CreatedDate, CreatedById, LastModifiedDate, LastModifiedById, SystemModstamp, LastViewedDate, LastReferencedDate, QuoteId, PricebookEntryId, OpportunityLineItemId, Quantity, UnitPrice, Discount, Description, ServiceDate, Product2Id, SortOrder, ListPrice, Subtotal, TotalPrice, ProductID__c, SerialNumber__c, UID__c, Inventory__c
                    FROM QuoteLineItem
-                   WHERE QuoteId = '{changeRecord.SalesforceRecordId}'
-                   ALL ROWS");
+                   WHERE QuoteId = '{changeRecord.SalesforceRecordId}'");
 
                     if (qliresults.Count == 0)
                     {
@@ -779,8 +777,7 @@ EXEC msdb.dbo.startjob @job = 'SF_MOBILE653_Reservation'
             var results = await QueryAsync(
                 $@"SELECT Id, IsDeleted, LineNumber, CreatedDate, CreatedById, LastModifiedDate, LastModifiedById, SystemModstamp, LastViewedDate, LastReferencedDate, QuoteId, PricebookEntryId, OpportunityLineItemId, Quantity, UnitPrice, Discount, Description, ServiceDate, Product2Id, SortOrder, ListPrice, Subtotal, TotalPrice, ProductID__c, SerialNumber__c, UID__c, Inventory__c
                    FROM QuoteLineItem
-                   WHERE Id = '{record.SalesforceRecordId}'
-                   ALL ROWS");
+                   WHERE Id = '{record.SalesforceRecordId}'");
 
             if (results.Count == 0)
             {
@@ -813,8 +810,7 @@ EXEC msdb.dbo.startjob @job = 'SF_MOBILE653_Reservation'
                 var results2 = await QueryAsync(
                     $@"SELECT Condition__c, CreatedById, CreatedDate, Description, DisplayUrl, ExternalDataSourceId, ExternalId, Family, Id, IsActive, IsArchived, IsDeleted, LastModifiedById, LastModifiedDate, LastReferencedDate, LastViewedDate, Name, ProductCode, ProductID__c, Product_Code__c, Product_Group__c, QuantityUnitOfMeasure, Revenue_Type__c, StockKeepingUnit, SystemModstamp
                    FROM Product2
-                   WHERE Id = '{sfo.Product2Id}'
-                   ALL ROWS");
+                   WHERE Id = '{sfo.Product2Id}'");
 
                 if (results2.Count == 0)
                 {
