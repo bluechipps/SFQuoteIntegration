@@ -84,6 +84,11 @@ public class QuoteChangeEventService
         }
         Log.Information($"Connected to Salesforce Streaming API at {instanceUrl}");
 
+        //_bayeuxClient.GetChannel("/**").AddListener(new WildcardListener());
+
+        /*
+         * OLD subscribe loop
+         * 
         foreach (var (channelName, entityType) in Channels)
         {
             // Each channel resumes from its own last-seen replay ID. Replay IDs
@@ -94,6 +99,20 @@ public class QuoteChangeEventService
 
             var channel = _bayeuxClient.GetChannel(channelName, lastReplayId);
             channel.Subscribe(new ChangeEventListener(entityType, _storageService, _queryService));
+            Log.Information($"Subscribed to {channelName} ({entityType})");
+        }
+        */
+        foreach (var (channelName, entityType) in Channels)
+        {
+            var lastReplayId = await _storageService.GetLastReplayIdAsync(entityType);
+            Log.Information($"Resuming {entityType} from ReplayId {lastReplayId}");
+
+            // Register replay extension for this channel (sets the resume point)
+            _bayeuxClient.GetChannel(channelName, lastReplayId);
+
+            // Attach the listener to the PLAIN channel — this is where messages are delivered
+            _bayeuxClient.GetChannel(channelName).Subscribe(new ChangeEventListener(entityType, _storageService, _queryService));
+
             Log.Information($"Subscribed to {channelName} ({entityType})");
         }
 
@@ -138,6 +157,16 @@ public class QuoteChangeEventService
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to refresh Salesforce token");
+        }
+    }
+
+    private class WildcardListener : IMessageListener
+    {
+        public void OnMessage(IClientSessionChannel channel, IMessage message)
+        {
+            // Fires for ANY message on ANY channel — data or meta
+            System.Diagnostics.Debug.Print($"[WILDCARD] Channel: {channel.Id} | Data present: {message.Data != null} | Json: {message.Json}");
+            Log.Information($"[WILDCARD] Channel: {channel.Id} | Data present: {message.Data != null} | Json: {message.Json}");
         }
     }
 
