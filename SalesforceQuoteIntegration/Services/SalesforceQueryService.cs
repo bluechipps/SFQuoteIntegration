@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Serilog;
 using SalesforceQuoteIntegration.Models;
+using CometD.NetCore.Salesforce.Messaging;
 using AutoMapper;
 
 namespace SalesforceQuoteIntegration.Services;
