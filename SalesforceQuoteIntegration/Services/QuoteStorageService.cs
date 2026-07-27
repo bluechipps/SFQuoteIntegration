@@ -238,11 +238,15 @@ public class QuoteStorageService
                 if (localQuoteItemRec != null)
                 {
                     sfo.sfQuoteLineItem_id = localQuoteItemRec.sfQuoteLineItem_id;
-                    sfo.ReservedEquipIds = localQuoteItemRec.ReservedEquipIds;
 
-                    Log.Information($"Saving sfQuoteLineItem {sfo.Id} with ReservedEquipIds: {sfo.ReservedEquipIds}, UpdatedReserved: {updatedReserved}");
+                    // Do NOT copy or set ReservedEquipIds here — the stored procedure
+                    // sp_ebs_sf_update_reservations owns that column and has already written it.
+                    Log.Information($"Saving sfQuoteLineItem {sfo.Id} | UpdatedReserved (from SP): {updatedReserved}");
+
                     db.Entry(localQuoteItemRec).CurrentValues.SetValues(sfo);
-                    
+
+                    // Prevent EF from overwriting the SP-managed column
+                    db.Entry(localQuoteItemRec).Property(x => x.ReservedEquipIds).IsModified = false;
                 }
                 else
                 {

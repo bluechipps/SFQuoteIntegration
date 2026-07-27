@@ -409,7 +409,7 @@ BEGIN
 
 				select @ret = ISNULL(STRING_AGG(kequipnum, ','),'') from @tbl
 				if (len(@ret) > 0)
-					update sfQuoteLineItem set ReservedEquipIds = @ret
+					update sfQuoteLineItem set ReservedEquipIds = @ret where Id = @lineId
 
 				IF ISNULL(@ids,'') <> @ret
 					INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body)
@@ -450,9 +450,9 @@ BEGIN
 				select @delstrids = ISNULL(STRING_AGG(kequipnum, ','),'') from @del
 
 				if (len(isnull(@strids,'')) > 0)
-					update sfQuoteLineItem set ReservedEquipIds = @strids
+					update sfQuoteLineItem set ReservedEquipIds = @strids where Id = @lineId
 				else
-					update sfQuoteLineItem set ReservedEquipIds = NULL
+					update sfQuoteLineItem set ReservedEquipIds = NULL where Id = @lineId
 
 				IF ISNULL(@ids,'') <> @strids
 					INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body)
