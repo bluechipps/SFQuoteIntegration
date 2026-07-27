@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<sfOpportunityLineItem> sfOpportunityLineItem { get; set; }
     public DbSet<sfProduct2> sfProduct2 { get; set; }
     public DbSet<sfAccount> sfAccount { get; set; }
+    public DbSet<sfProcessingNotification> sfProcessingNotification { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -343,6 +344,24 @@ public class AppDbContext : DbContext
             entity.Property(e => e.EBS_Customer_ID__c).HasMaxLength(50);
             entity.Property(e => e.Term_Length__c).HasColumnType("decimal(18,0)");
             entity.Property(e => e.LastModifiedDate__c);
+        });
+
+        modelBuilder.Entity<sfProcessingNotification>(entity =>
+        {
+            entity.ToTable("sfProcessingNotifications");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.EventType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.RecordId).HasMaxLength(50);
+            entity.Property(e => e.Title).HasMaxLength(100);
+            entity.Property(e => e.Body).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.Payload).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.CreatedAt).IsRequired().HasDefaultValueSql("SYSUTCDATETIME()");
+            entity.Property(e => e.IsProcessed).IsRequired().HasDefaultValue(false);
+            entity.Property(e => e.ProcessedAt);
+
+            entity.HasIndex(e => new { e.IsProcessed, e.CreatedAt })
+                  .HasDatabaseName("IX_sfProcessingNotifications_IsProcessed");
         });
     }
 }

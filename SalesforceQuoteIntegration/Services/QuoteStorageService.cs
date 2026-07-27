@@ -82,6 +82,22 @@ public class QuoteStorageService
         }
     }
 
+    public async Task UpdateSFQuoteKordnumAsync(string recordId, int kordnum, string? error = null)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync();
+
+        var rec = await db.sfQuote.FirstOrDefaultAsync(q => q.Id == recordId);
+        if (rec != null)
+        {
+            rec.kordnum = kordnum;
+        }
+        else
+        {
+            return;
+        }
+        
+        await db.SaveChangesAsync();
+    }
 
     public async Task MarkAsProcessedAsync(int recordId, string? error = null)
     {
@@ -95,6 +111,22 @@ public class QuoteStorageService
         record.ProcessingError = error;
 
         await db.SaveChangesAsync();
+    }
+
+    public async Task InsertNotification(sfProcessingNotification nr, string? error = null)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync();
+        try
+        {
+            db.sfProcessingNotification.Add(nr);
+            await db.SaveChangesAsync();
+            Log.Information($"Saved {nr.GetType().Name} record.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"Failed to save {nr.GetType().Name} record");
+            throw;
+        }
     }
     public async Task SaveOpp(sfOpportunity sfo, string? error = null)
     {

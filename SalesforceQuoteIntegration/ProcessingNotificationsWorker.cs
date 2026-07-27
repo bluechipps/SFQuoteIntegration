@@ -21,19 +21,20 @@ public class ProcessingNotificationsWorker : BackgroundService
             try
             {
                 var pending = await _rawSql.ExecuteReaderAsync(@$"
-SELECT TOP 50 Id, EventType, kordnum, kbranch, Payload FROM ProcessingNotifications WHERE IsProcessed = 0 ORDER BY CreatedAt
+SELECT TOP 50 Id, EventType, RecordId, Title, Body, Payload, CreatedAt, IsProcessed, ProcessedAt
+FROM ProcessingNotifications WHERE IsProcessed = 0 ORDER BY CreatedAt
 ");
-
                 foreach (var row in pending)
                 {
                     var id = (int)row["Id"]!;
-                    var eventType = row["EventType"]?.ToString();
-                    int kordnum = (int)row["kordnum"]!;
-                    var kbranch = row["kbranch"]?.ToString();
+                    string eventType = row["EventType"]?.ToString() ?? "";
+                    string title = row["Title"]?.ToString() ?? "";
+                    string body = row["Body"]?.ToString() ?? "";
+                    string recordId = row["RecordId"]?.ToString() ?? "";
 
-                    Log.Information($"Processing notification {id}: {eventType} for {kordnum}");
+                    Log.Information($"Processing notification {id}: {eventType}. Body: {body}");
 
-                    await HandleNotificationAsync(eventType!, kordnum!, kbranch!);
+                    await HandleNotificationAsync(eventType!, title, body, recordId);
 
                     // Mark as processed
                     await _rawSql.ExecuteNonQueryAsync(
@@ -49,14 +50,19 @@ SELECT TOP 50 Id, EventType, kordnum, kbranch, Payload FROM ProcessingNotificati
         }
     }
 
-    private async Task HandleNotificationAsync(string eventType, int kordnum, string kbranch)
+    private async Task HandleNotificationAsync(string eventType, string title, string body, string recordId = "")
     {
-        // Example: send a Salesforce custom notification
+        List<string> r = new List<string>();
+        r = await _queryService.GetGroupMembers("QuoteNotifications");
+        if (r.Count == 0) 
+        {
+            r.Add("005O100000SlPxKIAV"); //asheranko
+        }
         await _queryService.SendCustomNotificationAsync(
-            customNotifTypeId: "Order_Complete",
-            recipientIds: new List<string> { "ownerId" },
-            title: "Order Complete",
-            body: $"Kordnum {kordnum} Kbranch {kbranch} has finished processing",
-            targetId: "");
+            customNotifTypeId: eventType,
+            recipientIds: r,
+            title: title,
+            body: body,
+            targetId: recordId);
     }
 }

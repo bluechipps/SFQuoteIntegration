@@ -280,9 +280,11 @@ IF OBJECT_ID('sfEquipStatusChanges', 'U') IS NULL
 		CONSTRAINT [PK_sfEquipStatusChanges] PRIMARY KEY CLUSTERED ( [sfEquipStatusChanges_id] ASC ) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF)
 	)
 "},
-        {"sfQuoteLineItem_add_cols", @$"
+        {"add_cols", @$"
 IF COL_LENGTH('sfQuoteLineItem','ReservedEquipIds') IS NULL 
 	alter table sfQuoteLineItem add ReservedEquipIds nvarchar(500) NULL
+IF COL_LENGTH('sfQuote','kordnum') IS NULL 
+	alter table sfQuote add kordnum int NULL
 "},
         {"sp_ebs_unreserve_equip", @$"
 CREATE OR ALTER PROCEDURE sp_ebs_unreserve_equip (@kequipnum VARCHAR(12), @lineId nvarchar(18))
@@ -331,17 +333,19 @@ BEGIN
 		BEGIN TRANSACTION
 			declare @tbl table (kequipnum varchar(12))
 			declare @step int = 0, @steps int = 0
-			declare @ids varchar(max), @qty decimal(12,2) = 0, @pid varchar(18), @branch varchar(3), @status varchar(80)
+			declare @ids varchar(max), @qty decimal(12,2) = 0, @pid varchar(18), @branch varchar(3), @status varchar(80), @qid nvarchar(18), @qname nvarchar(510)
 
 			select top 1 @ids = NULLIF(ReservedEquipIds,''), 
 				@qty = CASE WHEN IsDeleted = 1 OR q.Status in ('Draft','Needs Review','In review','Rejected','Denied') THEN 0 
 					ELSE Quantity 
 					END, 
-				@pid = Product2Id, 
+				@pid = Product2Id,
+				@qid = sfQuoteLineItem.QuoteId,
+				@qname = q.Name,
 				@branch = left(q.Branch__c, 3),
 				@status = q.Status
 			from sfQuoteLineItem 
-			cross apply (select top 1 Status, Branch__c from sfQuote where sfQuoteLineItem.QuoteId = Id) q
+			cross apply (select top 1 Name, Status, Branch__c from sfQuote where sfQuoteLineItem.QuoteId = Id) q
 			where Id = @lineId
 			
 			declare @currentequips table (kequipnum varchar(max), rownum int)
@@ -403,10 +407,12 @@ BEGIN
 				)
 				UPDATE equipView SET eqpstatus = 'RE'
 
-
 				select @ret = ISNULL(STRING_AGG(kequipnum, ','),'') from @tbl
 				if (len(@ret) > 0)
 					update sfQuoteLineItem set ReservedEquipIds = @ret
+
+				INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body)
+					SELECT 'Equip_Status_Updated', @qid, N'EBS Equip Status Updated', N'Equipment status set to ""RE"" for: '+REPLACE(@ret,',',', ')
 			end
 			else if (@steps < 0)
 			begin
@@ -433,17 +439,22 @@ BEGIN
 					WHERE e.eqpstatus = 'RE'
 				)
 				UPDATE equipView SET eqpstatus = 'AV'
-
-				declare @strids varchar(max)
+				
+				declare @strids varchar(max), @delstrids varchar(max)
 				select @strids = ISNULL(STRING_AGG(c.kequipnum, ','),'') 
 				from @currentequips c
 				left join @del d on d.kequipnum = c.kequipnum
 				where d.kequipnum IS NULL
 
+				select @delstrids = ISNULL(STRING_AGG(kequipnum, ','),'') from @del
+
 				if (len(isnull(@strids,'')) > 0)
 					update sfQuoteLineItem set ReservedEquipIds = @strids
 				else
 					update sfQuoteLineItem set ReservedEquipIds = NULL
+
+				INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body)
+					SELECT 'Equip_Status_Updated', @qid, N'EBS Equip Status Updated', N'Equipment status restored to ""AV"" for: '+REPLACE(@delstrids,',',', ')
 
 				select @ret = ISNULL(@strids,'')
 			end
@@ -461,7 +472,43 @@ BEGIN
 	SET XACT_ABORT OFF
 	SELECT @ret ret
 END
-" }
+" },
+		{"sfProcessingNotifications", @$"
+IF OBJECT_ID('sfProcessingNotifications','U') IS NULL
+BEGIN
+	CREATE TABLE sfProcessingNotifications (
+		Id          INT IDENTITY PRIMARY KEY,
+		EventType   NVARCHAR(50)  NOT NULL,
+		RecordId    NVARCHAR(50)  NULL,
+		Title       NVARCHAR(100) NULL,
+		Body        NVARCHAR(MAX) NULL,
+		Payload     NVARCHAR(MAX) NULL,
+		CreatedAt   DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
+		IsProcessed BIT           NOT NULL DEFAULT 0,
+		ProcessedAt DATETIME2 NULL
+	)
+	CREATE INDEX IX_sfProcessingNotifications_IsProcessed ON sfProcessingNotifications(IsProcessed, CreatedAt);
+END
+"},
+        {"trg_oehead_ProcessingComplete", @$"
+CREATE OR ALTER TRIGGER trg_oehead_ProcessingComplete
+ON oehead
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF UPDATE(kswoseg)
+    BEGIN
+        INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body, Payload)
+			SELECT 'Order_Created', q.Id, N'Order Created', N'Order number '+cast(i.kordnum as nvarchar(max))+' has been created in EBS.',
+				   (SELECT i.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+			FROM inserted i
+			INNER JOIN deleted d ON i.kordnum = d.kordnum and i.kbranch = d.kbranch
+			cross apply( select top 1 Id from sfQuote where kordnum = i.kordnum and Branch__c = i.kbranch ) q
+			WHERE i.kswoseg = 0 AND d.kswoseg = -999;
+    END
+END
+"}
     };
     using (var scope = app.Services.CreateScope())
     {

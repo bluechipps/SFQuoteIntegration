@@ -119,6 +119,7 @@ public class sfQuote
     public string? Rep_Number__c { get; set; }
     public required string Branch__c { get; set; }
     public string? Invoice__c { get; set; }
+    public int? kordnum { get; set; }
 }
 public class sfQuoteLineItem
 {
@@ -363,3 +364,17 @@ public class sfAccount
     public decimal? Term_Length__c { get; set; }
     public DateTime? LastModifiedDate__c { get; set; }
 }
+
+public class sfProcessingNotification
+{
+    public int Id { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public string RecordId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public string Payload { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public bool IsProcessed { get; set; } = false;
+    public DateTime? ProcessedAt { get; set; }
+}
+
