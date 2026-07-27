@@ -204,36 +204,28 @@ public class QuoteChangeEventService
         {
             _parent = parent;
         }
-
         public void OnMessage(IClientSessionChannel channel, IMessage message)
         {
-            _parent._lastConnectAt = DateTime.UtcNow;
             if (!message.Successful)
             {
                 var error = message.ContainsKey("error") ? message["error"]?.ToString() : "none";
                 Log.Warning($"CometD /meta/connect unsuccessful | Error: {error}");
 
-                if (error != null && error.Contains("403::Unknown client"))
+                // Any 403 (session invalidated) should trigger a full reconnect.
+                // Salesforce uses several 403 variants, so match the code, not exact text.
+                if (error != null && error.Contains("403"))
                 {
-                    Log.Warning("CometD session expired — flagging for reconnect");
+                    Log.Warning("CometD session invalidated — flagging for reconnect");
                     _parent._lastConnectAt = DateTime.MinValue;
                 }
-            }
-            else
-            {
-                Log.Debug($"CometD /meta/connect heartbeat at {_parent._lastConnectAt}");
+                // Do NOT update _lastConnectAt to UtcNow on a failed connect —
+                // otherwise the health loop mistakes failed polls for healthy heartbeats.
+                return;
             }
 
-            //if (!message.Successful)
-            //{
-            //    var error = message.ContainsKey("error") ? message["error"]?.ToString() : "none";
-            //    Log.Warning($"CometD /meta/connect unsuccessful | Error: {Error}", error);
-            //}
-            //else
-            //{
-            //    System.Diagnostics.Debug.Print($"CometD /meta/connect heartbeat at {_parent._lastConnectAt}");
-            //    Log.Debug($"CometD /meta/connect heartbeat at {_parent._lastConnectAt}");
-            //}
+            // Only a SUCCESSFUL connect counts as a real heartbeat
+            _parent._lastConnectAt = DateTime.UtcNow;
+            Log.Debug($"CometD /meta/connect heartbeat at {_parent._lastConnectAt}");
         }
     }
 
@@ -284,6 +276,9 @@ public class QuoteChangeEventService
                                 EntityType         = _entityType,
                                 SalesforceRecordId = recordId,
                                 ChangeType         = payload.ChangeEventHeader.ChangeType,
+                                ChangedFields = payload.ChangeEventHeader.ChangedFields != null
+                                     ? string.Join(",", payload.ChangeEventHeader.ChangedFields)
+                                     : null,
                                 ReplayId           = replayId
                             };
 

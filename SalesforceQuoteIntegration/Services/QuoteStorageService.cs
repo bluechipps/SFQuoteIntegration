@@ -240,6 +240,7 @@ public class QuoteStorageService
                     sfo.sfQuoteLineItem_id = localQuoteItemRec.sfQuoteLineItem_id;
                     sfo.ReservedEquipIds = localQuoteItemRec.ReservedEquipIds;
 
+                    Log.Information($"Saving sfQuoteLineItem {sfo.Id} with ReservedEquipIds: {sfo.ReservedEquipIds}, UpdatedReserved: {updatedReserved}");
                     db.Entry(localQuoteItemRec).CurrentValues.SetValues(sfo);
                     
                 }
