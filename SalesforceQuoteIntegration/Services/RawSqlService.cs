@@ -245,7 +245,7 @@ public class RawSqlService
                 results.Add(row);
             }
 
-            Log.Debug($"ExecuteReader returned {results.Count} row(s) | SQL: {sql}");
+            //Log.Debug($"ExecuteReader returned {results.Count} row(s) | SQL: {sql}");
             return results;
         }
         catch (Exception ex)

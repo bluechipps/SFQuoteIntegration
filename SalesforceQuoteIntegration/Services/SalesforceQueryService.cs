@@ -1003,7 +1003,7 @@ EXEC msdb.dbo.startjob @job = 'SF_MOBILE653_Reservation'
         
         List<string> memberIds = [];
         var results = await QueryAsync(
-            $"SELECT GroupId, Id, SystemModstamp, UserOrGroupId FROM GroupMember");
+            $"SELECT GroupId, Id, SystemModstamp, UserOrGroupId FROM GroupMember Where GroupId = '00GO100000Bb7qbMAB'");
 
         if (results.Count == 0)
         {

@@ -22,7 +22,7 @@ public class ProcessingNotificationsWorker : BackgroundService
             {
                 var pending = await _rawSql.ExecuteReaderAsync(@$"
 SELECT TOP 50 Id, EventType, RecordId, Title, Body, Payload, CreatedAt, IsProcessed, ProcessedAt
-FROM ProcessingNotifications WHERE IsProcessed = 0 ORDER BY CreatedAt
+FROM sfProcessingNotifications WHERE IsProcessed = 0 ORDER BY CreatedAt
 ");
                 foreach (var row in pending)
                 {
@@ -38,12 +38,12 @@ FROM ProcessingNotifications WHERE IsProcessed = 0 ORDER BY CreatedAt
 
                     // Mark as processed
                     await _rawSql.ExecuteNonQueryAsync(
-                        $"UPDATE ProcessingNotifications SET IsProcessed = 1, ProcessedAt = SYSUTCDATETIME() WHERE Id = {id}");
+                        $"UPDATE sfProcessingNotifications SET IsProcessed = 1, ProcessedAt = SYSUTCDATETIME() WHERE Id = {id}");
                 }
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error polling ProcessingNotifications");
+                Log.Error(ex, "Error polling sfProcessingNotifications");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);

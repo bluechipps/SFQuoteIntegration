@@ -230,55 +230,15 @@ public class QuoteStorageService
         try
         {
             string quoteid = lstsfo.FirstOrDefault()?.QuoteId ?? qid2;
-            List<sfQuoteLineItem> incomingDeletedItems = [];
-
-            var allIncomingIds = lstsfo.Select(s => s.Id).ToList();
-            var deletedIncomingIds = lstsfo.Where(s => s.IsDeleted).Select(s => s.Id).ToList();
-            //RYAN - Don't remove missing Ids, only ones marked as deleted. ALL ROWS now in the soql query
-            //itemsToRemove = await db.sfQuoteLineItem
-            //    .Where(qLI => qLI.QuoteId == quoteid && (!allIncomingIds.Contains(qLI.Id) || deletedIncomingIds.Contains(qLI.Id)))
-            //    .ToListAsync();
-            incomingDeletedItems = await db.sfQuoteLineItem
-                .Where(qLI => qLI.QuoteId == quoteid && deletedIncomingIds.Contains(qLI.Id))
-                .ToListAsync();
-
-
-            foreach (var item in incomingDeletedItems)
-            {
-                //RYAN - First check for reserved equip ids and un-reserve them before removing the line item record
-                if (item.ReservedEquipIds != null && item.ReservedEquipIds.Length > 0)
-                {
-                    item.ReservedEquipIds.Split(',').ToList().ForEach(async eqid =>
-                    {
-                        Log.Information($"Un-reserving {eqid} for sfQuoteLineItem {item.Id} due to line item being deleted.");
-                        int rows = await _rawSql.ExecuteStoredProcedureNonQueryAsync("dbo.sp_ebs_unreserve_equip", new SqlParameter("@kequipnum", eqid), new SqlParameter("@lineId", item.Id));
-                    });
-                }
-                //RYAN - Dont remove, just let it be marked as deleted during save changes
-                //db.sfQuoteLineItem.Remove(item);
-                //Log.Information($"Removed sfQuoteLineItem {item.Id} due to not found or deleted on server.");
-            }
 
             foreach (var sfo in lstsfo)
             {
+                string updatedReserved = await _rawSql.ExecuteStoredProcedureScalarAsync<string>("dbo.sp_ebs_sf_update_reservations", new SqlParameter("@lineId", sfo.Id)) ?? "";
                 var localQuoteItemRec = await db.sfQuoteLineItem.FirstOrDefaultAsync(q => q.Id == sfo.Id);
                 if (localQuoteItemRec != null)
                 {
                     sfo.sfQuoteLineItem_id = localQuoteItemRec.sfQuoteLineItem_id;
-
-                    //RYAN - First check for reserved equip ids and un-reserve them before removing the line item record
-                    if (localQuoteItemRec.ReservedEquipIds != null && localQuoteItemRec.ReservedEquipIds.Length > 0)
-                    {
-                        localQuoteItemRec.ReservedEquipIds.Split(',').ToList().ForEach(async eqid =>
-                        {
-                            Log.Information($"Un-reserving {eqid} for sfQuoteLineItem {localQuoteItemRec.Id} due to line item being deleted.");
-                            string updatedReserved = await _rawSql.ExecuteStoredProcedureScalarAsync<string>(
-                                "dbo.sp_ebs_sf_update_reservations",
-                                new SqlParameter("@lineId", localQuoteItemRec.Id)
-                            ) ?? "";
-                        });
-                    }
-
+                    sfo.ReservedEquipIds = localQuoteItemRec.ReservedEquipIds;
 
                     db.Entry(localQuoteItemRec).CurrentValues.SetValues(sfo);
                     

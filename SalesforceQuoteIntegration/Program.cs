@@ -77,7 +77,7 @@ try
     builder.Services.AddSingleton<SalesforceQueryService>();
     builder.Services.AddSingleton<QuoteChangeEventService>();
     builder.Services.AddHostedService<QuoteIntegrationWorker>();
-    //builder.Services.AddHostedService<ProcessingNotificationsWorker>();
+    builder.Services.AddHostedService<ProcessingNotificationsWorker>();
 
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
@@ -411,8 +411,9 @@ BEGIN
 				if (len(@ret) > 0)
 					update sfQuoteLineItem set ReservedEquipIds = @ret
 
-				INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body)
-					SELECT 'Equip_Status_Updated', @qid, N'EBS Equip Status Updated', N'Equipment status set to ""RE"" for: '+REPLACE(@ret,',',', ')
+				IF ISNULL(@ids,'') <> @ret
+					INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body)
+						SELECT 'Equip_Status_Updated', @qid, N'EBS Equip Status Updated', N'Equipment status set to ""RE"" for: '+REPLACE(@ret,',',', ')
 			end
 			else if (@steps < 0)
 			begin
@@ -453,8 +454,9 @@ BEGIN
 				else
 					update sfQuoteLineItem set ReservedEquipIds = NULL
 
-				INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body)
-					SELECT 'Equip_Status_Updated', @qid, N'EBS Equip Status Updated', N'Equipment status restored to ""AV"" for: '+REPLACE(@delstrids,',',', ')
+				IF ISNULL(@ids,'') <> @strids
+					INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body)
+						SELECT 'Equip_Status_Updated', @qid, N'EBS Equip Status Updated', N'Equipment status restored to ""AV"" for: '+REPLACE(@delstrids,',',', ')
 
 				select @ret = ISNULL(@strids,'')
 			end
