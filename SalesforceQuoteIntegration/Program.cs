@@ -260,135 +260,134 @@ BEGIN
 END
 " },
 		{"sp_SF_AddCashCust", @$"
-IF OBJECT_ID('[dbo].[sp_SF_AddCashCust]', 'P') IS NULL
-	exec sp_executesql N'CREATE PROCEDURE [dbo].[sp_SF_AddCashCust] 
-	@custname varchar(40),
-	@kcustnum varchar(8)    = '''',
-	@kcustsrch varchar(10)  = '''',
-	@custsnum varchar(10)   = ''000'',
-	@custadd varchar(40)    = '''',
-	@custadd01 varchar(40)  = '''',
-	@custadd02 varchar(40)  = '''',
-	@custadd03 varchar(40)  = '''',
-	@custcity varchar(25)   = '''',
-	@custfax varchar(16)    = '''',
-	@custphone varchar(16)  = '''',
-	@custphon01 varchar(16)  = '''',
-	@custslsmn varchar(3)   = '''',
-	@custstate varchar(2)   = '''',
-	@custtxno varchar(12)   = '''',
-	@custzip varchar(10)    = '''',
-	@taxcodes varchar(10)    = '''',
-	@username varchar(8) = ''Admin'',
-	@custinsamt float = 0,
-	@custinsdt datetime = NULL
+CREATE OR ALTER PROCEDURE [dbo].[sp_SF_AddCashCust] 
+    @custname varchar(40),
+    @kcustnum varchar(8)    = '',
+    @kcustsrch varchar(10)  = '',
+    @custsnum varchar(10)   = '000',
+    @custadd varchar(40)    = '',
+    @custadd01 varchar(40)  = '',
+    @custadd02 varchar(40)  = '',
+    @custadd03 varchar(40)  = '',
+    @custcity varchar(25)   = '',
+    @custfax varchar(16)    = '',
+    @custphone varchar(16)  = '',
+    @custphon01 varchar(16)  = '',
+    @custslsmn varchar(3)   = '',
+    @custstate varchar(2)   = '',
+    @custtxno varchar(12)   = '',
+    @custzip varchar(10)    = '',
+    @taxcodes varchar(10)    = '',
+    @username varchar(8) = 'Admin',
+    @custinsamt float = 0,
+    @custinsdt datetime = NULL
 AS
 BEGIN
-	SET NOCOUNT ON
-	BEGIN TRY
-		SET @custname = ISNULL(@custname, '''')
-		SET @kcustnum = ISNULL(@kcustnum, '''')
-		SET @kcustsrch = ISNULL(@kcustsrch, '''')
-		SET @custsnum = ISNULL(@custsnum, '''')
-		SET @custadd = ISNULL(@custadd, '''')
-		SET @custadd01 = ISNULL(@custadd01, '''')
-		SET @custadd02 = ISNULL(@custadd02, '''')
-		SET @custadd03 = ISNULL(@custadd03, '''')
-		SET @custcity = ISNULL(@custcity, '''')
-		SET @custfax = ISNULL(@custfax, '''')
-		SET @custphone = ISNULL(@custphone, '''')
-		SET @custphon01 = ISNULL(@custphon01, '''')
-		SET @custslsmn = ISNULL(@custslsmn, '''')
-		SET @custstate = ISNULL(@custstate, '''')
-		SET @custtxno = ISNULL(@custtxno, '''')
-		SET @custzip = ISNULL(@custzip, '''')
-		SET @taxcodes = ISNULL(@taxcodes, '''')
-		SET @username = ISNULL(@username, '''')
+    SET NOCOUNT ON
+    BEGIN TRY
+        SET @custname = ISNULL(@custname, '')
+        SET @kcustnum = ISNULL(@kcustnum, '')
+        SET @kcustsrch = ISNULL(@kcustsrch, '')
+        SET @custsnum = ISNULL(@custsnum, '')
+        SET @custadd = ISNULL(@custadd, '')
+        SET @custadd01 = ISNULL(@custadd01, '')
+        SET @custadd02 = ISNULL(@custadd02, '')
+        SET @custadd03 = ISNULL(@custadd03, '')
+        SET @custcity = ISNULL(@custcity, '')
+        SET @custfax = ISNULL(@custfax, '')
+        SET @custphone = ISNULL(@custphone, '')
+        SET @custphon01 = ISNULL(@custphon01, '')
+        SET @custslsmn = ISNULL(@custslsmn, '')
+        SET @custstate = ISNULL(@custstate, '')
+        SET @custtxno = ISNULL(@custtxno, '')
+        SET @custzip = ISNULL(@custzip, '')
+        SET @taxcodes = ISNULL(@taxcodes, '')
+        SET @username = ISNULL(@username, '')
 
-		DECLARE @cmid int = 0
-		DECLARE @updating bit = 0
-		IF (@custname = '''')  RAISERROR (''Customer name is required.'', 18, 1)
-		IF (@kcustsrch = '''') SET @kcustsrch = @custname
-		IF (ISNUMERIC(@custsnum) = 0) RAISERROR (''Invalid customer shipto (custsnum)'', 18, 1)
-		IF (@kcustnum = '''')
-		BEGIN
-			DECLARE @t TABLE (kcn int)
-			INSERT INTO @t exec [dbo].[EBS_Increment_Custmast_Kcustnum]
-			SET @kcustnum = (SELECT TOP 1 kcn FROM @t)
-		END
-		ELSE
-			IF EXISTS(SELECT TOP 1 kcustnum FROM custmast WHERE kcustnum = @kcustnum AND custsnum = @custsnum)
-				set @updating = 1
+        DECLARE @cmid int = 0
+        DECLARE @updating bit = 0
+        IF (@custname = '')  RAISERROR ('Customer name is required.', 18, 1)
+        IF (@kcustsrch = '') SET @kcustsrch = @custname
+        IF (ISNUMERIC(@custsnum) = 0) RAISERROR ('Invalid customer shipto (custsnum)', 18, 1)
+        IF (@kcustnum = '')
+        BEGIN
+            DECLARE @t TABLE (kcn int)
+            INSERT INTO @t exec [dbo].[EBS_Increment_Custmast_Kcustnum]
+            SET @kcustnum = (SELECT TOP 1 kcn FROM @t)
+        END
+        ELSE
+            IF EXISTS(SELECT TOP 1 kcustnum FROM custmast WHERE kcustnum = @kcustnum AND custsnum = @custsnum)
+                set @updating = 1
 
-		IF (@custphone <> '''') SET @custphone = dbo.fnPhoneFormat(@custphone)
-		IF (@custphon01 <> '''') SET @custphon01 = dbo.fnPhoneFormat(@custphon01)
-		IF (@custfax <> '''') SET @custfax = dbo.fnPhoneFormat(@custfax)
-		-- IF (@custslsmn <> '''' AND NOT EXISTS(SELECT TOP 1 custslsmn FROM repmast WHERE custslsmn = @custslsmn)) RAISERROR (''Invalid salesman code.'', 18, 1)
-		-- IF (@username <> '''' AND NOT EXISTS(SELECT TOP 1 username FROM M_UserMaster WHERE UserName = @username)) RAISERROR (''Invalid username. Can be left blank.'', 18, 1)
-		IF (@taxcodes = '''' AND @custstate <> '''') SET @taxcodes = @custstate
-		-- If (@updating = 0 AND @custadd = '''') RAISERROR (''Customer address is required.'', 18, 1)
+        IF (@custphone <> '') SET @custphone = dbo.fnPhoneFormat(@custphone)
+        IF (@custphon01 <> '') SET @custphon01 = dbo.fnPhoneFormat(@custphon01)
+        IF (@custfax <> '') SET @custfax = dbo.fnPhoneFormat(@custfax)
+        -- IF (@custslsmn <> '' AND NOT EXISTS(SELECT TOP 1 custslsmn FROM repmast WHERE custslsmn = @custslsmn)) RAISERROR ('Invalid salesman code.', 18, 1)
+        -- IF (@username <> '' AND NOT EXISTS(SELECT TOP 1 username FROM M_UserMaster WHERE UserName = @username)) RAISERROR ('Invalid username. Can be left blank.', 18, 1)
+        IF (@taxcodes = '' AND @custstate <> '') SET @taxcodes = @custstate
+        -- If (@updating = 0 AND @custadd = '') RAISERROR ('Customer address is required.', 18, 1)
 
-		If (@updating = 1)
-		BEGIN
-			BEGIN TRY
-				UPDATE custmast
-				SET custname    = case when UPPER(@custname) <> '''' then UPPER(@custname) else custname end
-					,kcustsrch  = case when UPPER(@kcustsrch) <> '''' then UPPER(@kcustsrch) else kcustsrch end
-					,custadd    = case when UPPER(@custadd) <> '''' then UPPER(@custadd) else custadd end
-					,custadd01  = case when UPPER(@custadd01) <> '''' then UPPER(@custadd01) else custadd01 end
-					,custadd02  = case when UPPER(@custadd02) <> '''' then UPPER(@custadd02) else custadd02 end
-					,custadd03  = case when UPPER(@custadd03) <> '''' then UPPER(@custadd03) else custadd03 end
-					,custcity   = case when UPPER(@custcity) <> '''' then UPPER(@custcity) else custcity end
-					,custstate  = case when UPPER(@custstate) <> '''' then UPPER(@custstate) else custstate end
-					,custzip    = case when UPPER(@custzip) <> '''' then UPPER(@custzip) else custzip end
-					,custphone  = case when UPPER(@custphone) <> '''' then UPPER(@custphone) else custphone end
-					,custphon01 = case when UPPER(@custphon01) <> '''' then UPPER(@custphon01) else custphon01 end
-					,custfax    = case when UPPER(@custfax) <> '''' then UPPER(@custfax) else custfax end
-					,custslsmn  = case when UPPER(@custslsmn) <> '''' then UPPER(@custslsmn) else custslsmn end
-					,taxcodes   = case when UPPER(@taxcodes) <> '''' then UPPER(@taxcodes) else taxcodes end
-					,custtxno   = case when UPPER(@custtxno) <> '''' then UPPER(@custtxno) else custtxno end
-					,custdtact  = GETDATE()
-					,custinsamt = case when @custinsamt <> 0 then @custinsamt else custinsamt end
-					,custinsdt  = case when @custinsdt <> CAST(0 as datetime) then @custinsdt else custinsdt end
-				WHERE kcustnum = @kcustnum and custsnum = @custsnum
-			
-				INSERT INTO custaudit ([ktermid], [icdtnew], [eqpstatus], [kdeleteflg], [kcustnum], [kcustsrch], [custsnum], [custname], [custadd], [custadd01], [custadd02], [custadd03], [custcity], [custstate], [custzip], [custphone], [custphon01], [custfax], [custfax01], [custdtact], [custstdpo], [custslsmn], [custrtrm], [custetrm], [custptrm], [custstrm], [custtaxbl], [custexreas], [taxcodes], [custtcstk], [custtcnstk], [custrcl], [custecl], [custlcl], [custpcl], [custcrlim], [custcreact], [custsrvbal], [custrntbal], [custptsbal], [custsrvar], [custptsar], [custrntar], [custeqpar], [custtxno], [custtxdate], [custins], [custinsdt], [custartype], [glco], [glacct], [glbr], [gldpt], [custstmt], [custscinv], [custscpct], [custspcl], [custnuminv], [custconsno], [custtype], [custporeq], [custnochk], [custcod], [custshpvia], [custteps], [custtepdlr], [custprtprc], [custinvlhr], [custdisad1], [custdisad2], [custdisad3], [custeqxrep], [custeqcrep], [vendctry], [vendcon], [vendcon01], [date1], [custmadd], [custmadd01], [custmadd02], [custmadd03], [custmcity], [custmst], [custmzip], [custbcnty], [custmcnty], [custownssn], [custxvend], [custtypcd], [custmmkt], [custfsale], [custshcom], [custinstr], [custinst01], [custinst02], [custinsamt], [custcolid], [custcrstat], [custcrrate], [custd_b], [custpergnt], [custreview], [custcolat], [servzone])
-					SELECT @username, GETDATE(), ''AN'', [kdeleteflg], [kcustnum], [kcustsrch], [custsnum], [custname], [custadd], [custadd01], [custadd02], [custadd03], [custcity], [custstate], [custzip], [custphone], [custphon01], [custfax], [custfax01], [custdtact], [custstdpo], [custslsmn], [custrtrm], [custetrm], [custptrm], [custstrm], [custtaxbl], [custexreas], [taxcodes], [custtcstk], [custtcnstk], [custrcl], [custecl], [custlcl], [custpcl], [custcrlim], [custcreact], [custsrvbal], [custrntbal], [custptsbal], [custsrvar], [custptsar], [custrntar], [custeqpar], [custtxno], [custtxdate], [custins], [custinsdt], [custartype], [glco], [glacct], [glbr], [gldpt], [custstmt], [custscinv], [custscpct], [custspcl], [custnuminv], [custconsno], [custtype], [custporeq], [custnochk], [custcod], [custshpvia], [custteps], [custtepdlr], [custprtprc], [custinvlhr], [custdisad1], [custdisad2], [custdisad3], [custeqxrep], [custeqcrep], [vendctry], [vendcon], [vendcon01], [date1], [custmadd], [custmadd01], [custmadd02], [custmadd03], [custmcity], [custmst], [custmzip], [custbcnty], [custmcnty], [custownssn], [custxvend], [custtypcd], [custmmkt], [custfsale], [custshcom], [custinstr], [custinst01], [custinst02], [custinsamt], [custcolid], [custcrstat], [custcrrate], [custd_b], [custpergnt], [custreview], [custcolat], [servzone]
-					FROM custmast
-					WHERE kcustnum = @kcustnum and custsnum = @custsnum
-			END TRY
-			BEGIN CATCH
-			END CATCH
-		END
-		ELSE
-		BEGIN
-			--Trick for reserving/incrementing an identity value ahead of time
-			BEGIN TRANSACTION;
-			INSERT custmast WITH (TABLOCKX) DEFAULT VALUES;
-			ROLLBACK TRANSACTION;
-			SELECT @cmid = SCOPE_IDENTITY();
+        If (@updating = 1)
+        BEGIN
+            BEGIN TRY
+                UPDATE custmast
+                SET custname    = case when UPPER(@custname) <> '' then UPPER(@custname) else custname end
+                    ,kcustsrch  = case when UPPER(@kcustsrch) <> '' then UPPER(@kcustsrch) else kcustsrch end
+                    ,custadd    = case when UPPER(@custadd) <> '' then UPPER(@custadd) else custadd end
+                    ,custadd01  = case when UPPER(@custadd01) <> '' then UPPER(@custadd01) else custadd01 end
+                    ,custadd02  = case when UPPER(@custadd02) <> '' then UPPER(@custadd02) else custadd02 end
+                    ,custadd03  = case when UPPER(@custadd03) <> '' then UPPER(@custadd03) else custadd03 end
+                    ,custcity   = case when UPPER(@custcity) <> '' then UPPER(@custcity) else custcity end
+                    ,custstate  = case when UPPER(@custstate) <> '' then UPPER(@custstate) else custstate end
+                    ,custzip    = case when UPPER(@custzip) <> '' then UPPER(@custzip) else custzip end
+                    ,custphone  = case when UPPER(@custphone) <> '' then UPPER(@custphone) else custphone end
+                    ,custphon01 = case when UPPER(@custphon01) <> '' then UPPER(@custphon01) else custphon01 end
+                    ,custfax    = case when UPPER(@custfax) <> '' then UPPER(@custfax) else custfax end
+                    ,custslsmn  = case when UPPER(@custslsmn) <> '' then UPPER(@custslsmn) else custslsmn end
+                    ,taxcodes   = case when UPPER(@taxcodes) <> '' then UPPER(@taxcodes) else taxcodes end
+                    ,custtxno   = case when UPPER(@custtxno) <> '' then UPPER(@custtxno) else custtxno end
+                    ,custdtact  = GETDATE()
+                    ,custinsamt = case when @custinsamt <> 0 then @custinsamt else custinsamt end
+                    ,custinsdt  = case when @custinsdt <> CAST(0 as datetime) then @custinsdt else custinsdt end
+                WHERE kcustnum = @kcustnum and custsnum = @custsnum
+            
+                INSERT INTO custaudit ([ktermid], [icdtnew], [eqpstatus], [kdeleteflg], [kcustnum], [kcustsrch], [custsnum], [custname], [custadd], [custadd01], [custadd02], [custadd03], [custcity], [custstate], [custzip], [custphone], [custphon01], [custfax], [custfax01], [custdtact], [custstdpo], [custslsmn], [custrtrm], [custetrm], [custptrm], [custstrm], [custtaxbl], [custexreas], [taxcodes], [custtcstk], [custtcnstk], [custrcl], [custecl], [custlcl], [custpcl], [custcrlim], [custcreact], [custsrvbal], [custrntbal], [custptsbal], [custsrvar], [custptsar], [custrntar], [custeqpar], [custtxno], [custtxdate], [custins], [custinsdt], [custartype], [glco], [glacct], [glbr], [gldpt], [custstmt], [custscinv], [custscpct], [custspcl], [custnuminv], [custconsno], [custtype], [custporeq], [custnochk], [custcod], [custshpvia], [custteps], [custtepdlr], [custprtprc], [custinvlhr], [custdisad1], [custdisad2], [custdisad3], [custeqxrep], [custeqcrep], [vendctry], [vendcon], [vendcon01], [date1], [custmadd], [custmadd01], [custmadd02], [custmadd03], [custmcity], [custmst], [custmzip], [custbcnty], [custmcnty], [custownssn], [custxvend], [custtypcd], [custmmkt], [custfsale], [custshcom], [custinstr], [custinst01], [custinst02], [custinsamt], [custcolid], [custcrstat], [custcrrate], [custd_b], [custpergnt], [custreview], [custcolat], [servzone])
+                    SELECT @username, GETDATE(), 'AN', [kdeleteflg], [kcustnum], [kcustsrch], [custsnum], [custname], [custadd], [custadd01], [custadd02], [custadd03], [custcity], [custstate], [custzip], [custphone], [custphon01], [custfax], [custfax01], [custdtact], [custstdpo], [custslsmn], [custrtrm], [custetrm], [custptrm], [custstrm], [custtaxbl], [custexreas], [taxcodes], [custtcstk], [custtcnstk], [custrcl], [custecl], [custlcl], [custpcl], [custcrlim], [custcreact], [custsrvbal], [custrntbal], [custptsbal], [custsrvar], [custptsar], [custrntar], [custeqpar], [custtxno], [custtxdate], [custins], [custinsdt], [custartype], [glco], [glacct], [glbr], [gldpt], [custstmt], [custscinv], [custscpct], [custspcl], [custnuminv], [custconsno], [custtype], [custporeq], [custnochk], [custcod], [custshpvia], [custteps], [custtepdlr], [custprtprc], [custinvlhr], [custdisad1], [custdisad2], [custdisad3], [custeqxrep], [custeqcrep], [vendctry], [vendcon], [vendcon01], [date1], [custmadd], [custmadd01], [custmadd02], [custmadd03], [custmcity], [custmst], [custmzip], [custbcnty], [custmcnty], [custownssn], [custxvend], [custtypcd], [custmmkt], [custfsale], [custshcom], [custinstr], [custinst01], [custinst02], [custinsamt], [custcolid], [custcrstat], [custcrrate], [custd_b], [custpergnt], [custreview], [custcolat], [servzone]
+                    FROM custmast
+                    WHERE kcustnum = @kcustnum and custsnum = @custsnum
+            END TRY
+            BEGIN CATCH
+            END CATCH
+        END
+        ELSE
+        BEGIN
+            --Trick for reserving/incrementing an identity value ahead of time
+            BEGIN TRANSACTION;
+            INSERT custmast WITH (TABLOCKX) DEFAULT VALUES;
+            ROLLBACK TRANSACTION;
+            SELECT @cmid = SCOPE_IDENTITY();
 
-			SET IDENTITY_INSERT custmast ON;
-			INSERT INTO custmast (custmast_id,kdeleteflg,kcustnum ,kcustsrch ,custsnum ,custname ,custadd ,custadd01 ,custadd02 ,custadd03 ,custcity ,custstate ,custzip ,custphone ,custphon01 ,custfax ,custfax01,custdtact,custstdpo,custslsmn ,custrtrm,custetrm,custptrm,custstrm,custtaxbl,custexreas,taxcodes ,custtcstk,custtcnstk,custrcl,custecl,custlcl,custpcl,custcrlim, custcreact,custsrvbal,custrntbal,custptsbal,custsrvar,custptsar,custrntar,custeqpar,custtxno ,custtxdate,custins,custinsdt ,custartype,glco,glacct,glbr,gldpt,custstmt,custscinv,custscpct,custspcl,custnuminv,custconsno ,custtype,custporeq,custnochk,custcod,custshpvia,custteps,custtepdlr,custprtprc,custinvlhr,custdisad1,custdisad2,custdisad3,custeqxrep,custeqcrep,vendctry,vendcon,vendcon01,date1, custmadd,custmadd01,custmadd02,custmadd03,custmcity,custmst,custmzip,custbcnty,custmcnty,custownssn,custxvend,custtypcd,custmmkt,custfsale,custshcom,custinstr,custinst01,custinst02,custinsamt ,custcolid,custcrstat,custcrrate,custd_b,custpergnt,custreview,custcolat,servzone)
-			VALUES(@cmid ,''N'' ,UPPER(@kcustnum),UPPER(@kcustsrch),UPPER(@custsnum),UPPER(@custname),UPPER(@custadd),UPPER(@custadd01),UPPER(@custadd02),UPPER(@custadd03),UPPER(@custcity),UPPER(@custstate),UPPER(@custzip),UPPER(@custphone),UPPER(@custphon01),UPPER(@custfax),'''' ,GETDATE(),'''' ,UPPER(@custslsmn),0 ,0 ,0 ,0 ,''T'' ,'''' ,UPPER(@taxcodes),'''' ,''Hi'' ,''RC'' ,''RC'' ,''RC'' ,''RC'' ,888888888,'''' ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,UPPER(@custtxno),NULL ,'''' ,@custinsdt,''Tr'' ,'''' ,'''' ,'''' ,'''' ,''Y'' ,''N'' ,0.9999 ,'''' ,1 ,UPPER(@kcustnum),'''' ,''N'' ,''Y'' ,''N'' ,'''' ,'''' ,''None'' ,''Y'' ,''No'' ,'''' ,'''' ,'''' ,'''' ,'''' ,''USA'' ,'''' ,'''' ,GETDATE(), '''' ,'''' ,'''' ,'''' ,'''' ,'''' ,'''' ,'''' ,''USA'' ,'''' ,'''' ,''Ctr'' ,'''' ,NULL, ''N'' ,'''' ,'''' ,'''' ,@custinsamt,'''' ,'''' ,'''' ,'''' ,''N'' ,NULL ,''N'' ,'''')
-			SET IDENTITY_INSERT custmast OFF;
+            SET IDENTITY_INSERT custmast ON;
+            INSERT INTO custmast (custmast_id,kdeleteflg,kcustnum ,kcustsrch ,custsnum ,custname ,custadd ,custadd01 ,custadd02 ,custadd03 ,custcity ,custstate ,custzip ,custphone ,custphon01 ,custfax ,custfax01,custdtact,custstdpo,custslsmn ,custrtrm,custetrm,custptrm,custstrm,custtaxbl,custexreas,taxcodes ,custtcstk,custtcnstk,custrcl,custecl,custlcl,custpcl,custcrlim, custcreact,custsrvbal,custrntbal,custptsbal,custsrvar,custptsar,custrntar,custeqpar,custtxno ,custtxdate,custins,custinsdt ,custartype,glco,glacct,glbr,gldpt,custstmt,custscinv,custscpct,custspcl,custnuminv,custconsno ,custtype,custporeq,custnochk,custcod,custshpvia,custteps,custtepdlr,custprtprc,custinvlhr,custdisad1,custdisad2,custdisad3,custeqxrep,custeqcrep,vendctry,vendcon,vendcon01,date1, custmadd,custmadd01,custmadd02,custmadd03,custmcity,custmst,custmzip,custbcnty,custmcnty,custownssn,custxvend,custtypcd,custmmkt,custfsale,custshcom,custinstr,custinst01,custinst02,custinsamt ,custcolid,custcrstat,custcrrate,custd_b,custpergnt,custreview,custcolat,servzone)
+            VALUES(@cmid ,'N' ,UPPER(@kcustnum),UPPER(@kcustsrch),UPPER(@custsnum),UPPER(@custname),UPPER(@custadd),UPPER(@custadd01),UPPER(@custadd02),UPPER(@custadd03),UPPER(@custcity),UPPER(@custstate),UPPER(@custzip),UPPER(@custphone),UPPER(@custphon01),UPPER(@custfax),'' ,GETDATE(),'' ,UPPER(@custslsmn),0 ,0 ,0 ,0 ,'T' ,'' ,UPPER(@taxcodes),'' ,'Hi' ,'RC' ,'RC' ,'RC' ,'RC' ,888888888,'' ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,UPPER(@custtxno),NULL ,'' ,@custinsdt,'Tr' ,'' ,'' ,'' ,'' ,'Y' ,'N' ,0.9999 ,'' ,1 ,UPPER(@kcustnum),'' ,'N' ,'Y' ,'N' ,'' ,'' ,'None' ,'Y' ,'No' ,'' ,'' ,'' ,'' ,'' ,'USA' ,'' ,'' ,GETDATE(), '' ,'' ,'' ,'' ,'' ,'' ,'' ,'' ,'USA' ,'' ,'' ,'Ctr' ,'' ,NULL, 'N' ,'' ,'' ,'' ,@custinsamt,'' ,'' ,'' ,'' ,'N' ,NULL ,'N' ,'')
+            SET IDENTITY_INSERT custmast OFF;
 
-			delete p
-			from utincremnt_inprogress p
-			inner join custmast c on cast(p.cnvi005 as varchar(8)) = c.kcustnum 
-			
-			INSERT INTO custaudit ([ktermid], [icdtnew], [eqpstatus], [kdeleteflg], [kcustnum], [kcustsrch], [custsnum], [custname], [custadd], [custadd01], [custadd02], [custadd03], [custcity], [custstate], [custzip], [custphone], [custphon01], [custfax], [custfax01], [custdtact], [custstdpo], [custslsmn], [custrtrm], [custetrm], [custptrm], [custstrm], [custtaxbl], [custexreas], [taxcodes], [custtcstk], [custtcnstk], [custrcl], [custecl], [custlcl], [custpcl], [custcrlim], [custcreact], [custsrvbal], [custrntbal], [custptsbal], [custsrvar], [custptsar], [custrntar], [custeqpar], [custtxno], [custtxdate], [custins], [custinsdt], [custartype], [glco], [glacct], [glbr], [gldpt], [custstmt], [custscinv], [custscpct], [custspcl], [custnuminv], [custconsno], [custtype], [custporeq], [custnochk], [custcod], [custshpvia], [custteps], [custtepdlr], [custprtprc], [custinvlhr], [custdisad1], [custdisad2], [custdisad3], [custeqxrep], [custeqcrep], [vendctry], [vendcon], [vendcon01], [date1], [custmadd], [custmadd01], [custmadd02], [custmadd03], [custmcity], [custmst], [custmzip], [custbcnty], [custmcnty], [custownssn], [custxvend], [custtypcd], [custmmkt], [custfsale], [custshcom], [custinstr], [custinst01], [custinst02], [custinsamt], [custcolid], [custcrstat], [custcrrate], [custd_b], [custpergnt], [custreview], [custcolat], [servzone])
-			VALUES (UPPER(@username), GETDATE(), ''AN'', 
-				''N'' ,UPPER(@kcustnum),UPPER(@kcustsrch),UPPER(@custsnum),UPPER(@custname),UPPER(@custadd),UPPER(@custadd01),UPPER(@custadd02),UPPER(@custadd03),UPPER(@custcity),UPPER(@custstate),UPPER(@custzip),UPPER(@custphone),UPPER(@custphon01),UPPER(@custfax),'''' ,GETDATE(),'''' ,UPPER(@custslsmn),0 ,0 ,0 ,0 ,''T'' ,'''' ,UPPER(@taxcodes),'''' ,''Hi'' ,''RC'' ,''RC'' ,''RC'' ,''RC'' ,888888888,'''' ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,UPPER(@custtxno),NULL ,'''' ,@custinsdt,''Tr'' ,'''' ,'''' ,'''' ,'''' ,''Y'' ,''N'' ,0.9999 ,'''' ,1 ,UPPER(@kcustnum),'''' ,''N'' ,''Y'' ,''N'' ,'''' ,'''' ,''None'' ,''Y'' ,''No'' ,'''' ,'''' ,'''' ,''N'' ,''N'' ,''USA'' ,'''' ,'''' ,GETDATE(), '''' ,'''' ,'''' ,'''' ,'''' ,'''' ,'''' ,'''' ,''USA'' ,'''' ,'''' ,''Ctr'' ,'''' ,NULL, ''N'' ,'''' ,'''' ,'''' ,@custinsamt,'''' ,'''' ,'''' ,'''' ,''N'' ,NULL ,''N'' ,'''')
+            delete p
+            from utincremnt_inprogress p
+            inner join custmast c on cast(p.cnvi005 as varchar(8)) = c.kcustnum 
+            
+            INSERT INTO custaudit ([ktermid], [icdtnew], [eqpstatus], [kdeleteflg], [kcustnum], [kcustsrch], [custsnum], [custname], [custadd], [custadd01], [custadd02], [custadd03], [custcity], [custstate], [custzip], [custphone], [custphon01], [custfax], [custfax01], [custdtact], [custstdpo], [custslsmn], [custrtrm], [custetrm], [custptrm], [custstrm], [custtaxbl], [custexreas], [taxcodes], [custtcstk], [custtcnstk], [custrcl], [custecl], [custlcl], [custpcl], [custcrlim], [custcreact], [custsrvbal], [custrntbal], [custptsbal], [custsrvar], [custptsar], [custrntar], [custeqpar], [custtxno], [custtxdate], [custins], [custinsdt], [custartype], [glco], [glacct], [glbr], [gldpt], [custstmt], [custscinv], [custscpct], [custspcl], [custnuminv], [custconsno], [custtype], [custporeq], [custnochk], [custcod], [custshpvia], [custteps], [custtepdlr], [custprtprc], [custinvlhr], [custdisad1], [custdisad2], [custdisad3], [custeqxrep], [custeqcrep], [vendctry], [vendcon], [vendcon01], [date1], [custmadd], [custmadd01], [custmadd02], [custmadd03], [custmcity], [custmst], [custmzip], [custbcnty], [custmcnty], [custownssn], [custxvend], [custtypcd], [custmmkt], [custfsale], [custshcom], [custinstr], [custinst01], [custinst02], [custinsamt], [custcolid], [custcrstat], [custcrrate], [custd_b], [custpergnt], [custreview], [custcolat], [servzone])
+            VALUES (UPPER(@username), GETDATE(), 'AN', 
+                'N' ,UPPER(@kcustnum),UPPER(@kcustsrch),UPPER(@custsnum),UPPER(@custname),UPPER(@custadd),UPPER(@custadd01),UPPER(@custadd02),UPPER(@custadd03),UPPER(@custcity),UPPER(@custstate),UPPER(@custzip),UPPER(@custphone),UPPER(@custphon01),UPPER(@custfax),'' ,GETDATE(),'' ,UPPER(@custslsmn),0 ,0 ,0 ,0 ,'T' ,'' ,UPPER(@taxcodes),'' ,'Hi' ,'RC' ,'RC' ,'RC' ,'RC' ,888888888,'' ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,UPPER(@custtxno),NULL ,'' ,@custinsdt,'Tr' ,'' ,'' ,'' ,'' ,'Y' ,'N' ,0.9999 ,'' ,1 ,UPPER(@kcustnum),'' ,'N' ,'Y' ,'N' ,'' ,'' ,'None' ,'Y' ,'No' ,'' ,'' ,'' ,'N' ,'N' ,'USA' ,'' ,'' ,GETDATE(), '' ,'' ,'' ,'' ,'' ,'' ,'' ,'' ,'USA' ,'' ,'' ,'Ctr' ,'' ,NULL, 'N' ,'' ,'' ,'' ,@custinsamt,'' ,'' ,'' ,'' ,'N' ,NULL ,'N' ,'')
 
-		END
-		SELECT @cmid
-	END TRY
-	BEGIN CATCH
-		DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE(), @ErrorSeverity INT = ERROR_SEVERITY(), @ErrorState INT = ERROR_STATE()
-		RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
-	END CATCH
-	SET NOCOUNT OFF
+        END
+        SELECT @kcustnum AS kcustnum
+    END TRY
+    BEGIN CATCH
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE(), @ErrorSeverity INT = ERROR_SEVERITY(), @ErrorState INT = ERROR_STATE()
+        RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
+    END CATCH
+    SET NOCOUNT OFF
 END'
 "},
         {"sfProcessingQueue", @$"

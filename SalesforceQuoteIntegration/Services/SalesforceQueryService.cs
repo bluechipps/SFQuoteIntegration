@@ -5,6 +5,7 @@ using Serilog;
 using SalesforceQuoteIntegration.Models;
 using CometD.NetCore.Salesforce.Messaging;
 using AutoMapper;
+using System.Data;
 
 namespace SalesforceQuoteIntegration.Services;
 
@@ -504,9 +505,38 @@ SET NOCOUNT OFF
                     sfAccount? sfacct = await _storageService.GetAccountByIdAsync(sfo.AccountId);
                     if (sfacct != null && string.IsNullOrEmpty(sfacct?.EBS_Customer_ID__c))
                     {
-                        int custmastId = await _rawSql.ExecuteStoredProcedureScalarAsync<int>("dbo.sp_SF_AddCashCust",
-                            new SqlParameter("@custname", sfacct?.Name)
-                        );
+                        try
+                        {
+                            string kcustnum = await _rawSql.ExecuteStoredProcedureScalarAsync<string>("dbo.sp_SF_AddCashCust",
+                                new SqlParameter("@custname", SqlDbType.VarChar, 40) { Value = (object?)sfacct?.Name ?? DBNull.Value },
+                                new SqlParameter("@custinsdt", SqlDbType.DateTime) { Value = DBNull.Value },
+                                new SqlParameter("@custname", SqlDbType.VarChar, 40) { Value = (object?)sfacct?.Name ?? DBNull.Value },
+                                new SqlParameter("@kcustnum", SqlDbType.VarChar, 8) { Value = "" },
+                                new SqlParameter("@kcustsrch", SqlDbType.VarChar, 10) { Value = DBNull.Value },
+                                new SqlParameter("@custsnum", SqlDbType.VarChar, 10) { Value = "000" },
+                                new SqlParameter("@custadd", SqlDbType.VarChar, 40) { Value = (object?)sfacct?.BillingStreet ?? DBNull.Value },
+                                new SqlParameter("@custadd01", SqlDbType.VarChar, 40) { Value = DBNull.Value },
+                                new SqlParameter("@custadd02", SqlDbType.VarChar, 40) { Value = DBNull.Value },
+                                new SqlParameter("@custadd03", SqlDbType.VarChar, 40) { Value = DBNull.Value },
+                                new SqlParameter("@custcity", SqlDbType.VarChar, 25) { Value = (object?)sfacct?.BillingCity ?? DBNull.Value },
+                                new SqlParameter("@custfax", SqlDbType.VarChar, 16) { Value = DBNull.Value },
+                                new SqlParameter("@custphone", SqlDbType.VarChar, 16) { Value = (object?)sfacct?.Phone ?? DBNull.Value },
+                                new SqlParameter("@custphon01", SqlDbType.VarChar, 16) { Value = DBNull.Value },
+                                new SqlParameter("@custslsmn", SqlDbType.VarChar, 3) { Value = DBNull.Value },
+                                new SqlParameter("@custstate", SqlDbType.VarChar, 2) { Value = (object?)sfacct?.BillingState ?? DBNull.Value },
+                                new SqlParameter("@custtxno", SqlDbType.VarChar, 12) { Value = DBNull.Value },
+                                new SqlParameter("@custzip", SqlDbType.VarChar, 10) { Value = (object?)sfacct?.BillingPostalCode ?? DBNull.Value },
+                                new SqlParameter("@taxcodes", SqlDbType.VarChar, 10) { Value = DBNull.Value },
+                                new SqlParameter("@username", SqlDbType.VarChar, 8) { Value = "Admin" },
+                                new SqlParameter("@custinsamt", SqlDbType.Float) { Value = 0.0 },
+                                new SqlParameter("@custinsdt", SqlDbType.DateTime) { Value = DBNull.Value }
+                            ) ?? "";
+                            Log.Information($"Created/updated EBS customer {kcustnum} for account {sfacct?.Id}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error(ex, $"Failed to create new EBS customer for sfAccount {sfacct.Id}");
+                        }
                     }
                 }
                 try
