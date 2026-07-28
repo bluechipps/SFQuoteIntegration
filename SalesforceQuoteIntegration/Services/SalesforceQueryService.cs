@@ -111,6 +111,63 @@ public class SalesforceQueryService
             .ToList();
     }
 
+    /// <summary>
+    /// Updates one or more fields on a Salesforce record via PATCH.
+    /// Returns true on success. Salesforce returns HTTP 204 No Content on a successful update.
+    /// </summary>
+    /// <param name="objectType">The sObject API name, e.g. "Account" or "Quote".</param>
+    /// <param name="recordId">The 15- or 18-char Salesforce record Id.</param>
+    /// <param name="fields">Field API names mapped to their new values.</param>
+    public async Task<bool> UpdateRecordFieldsAsync(
+        string objectType,
+        string recordId,
+        Dictionary<string, object?> fields)
+    {
+        var (token, instanceUrl) = await _authService.GetTokenAsync();
+
+        var url = $"{instanceUrl}/services/data/v{ApiVersion}/sobjects/{objectType}/{recordId}";
+
+        var body = JsonConvert.SerializeObject(fields);
+        var request = new HttpRequestMessage(HttpMethod.Patch, url)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add("Authorization", $"Bearer {token}");
+
+        try
+        {
+            var response = await _httpClient.SendAsync(request);
+
+            // Salesforce returns 204 No Content on a successful PATCH
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
+            {
+                Log.Information($"Updated {objectType} {recordId}: {body}");
+                return true;
+            }
+
+            var error = await response.Content.ReadAsStringAsync();
+            Log.Error($"Update {objectType} {recordId} failed [{(int)response.StatusCode}]: {error}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"Update {objectType} {recordId} threw an exception");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Convenience helper — writes the EBS customer number to a record's EBS_Customer_ID__c field.
+    /// Works for any object that has that field (Account, Quote).
+    /// </summary>
+    public async Task<bool> SetEbsCustomerIdAsync(string objectType, string recordId, string kcustnum)
+    {
+        return await UpdateRecordFieldsAsync(
+            objectType,
+            recordId,
+            new Dictionary<string, object?> { ["EBS_Customer_ID__c"] = kcustnum });
+    }
+
     public async Task<JObject?> GetRecordAsync(string objectType, string recordId)
     {
         var (token, instanceUrl) = await _authService.GetTokenAsync();
@@ -303,8 +360,8 @@ END CATCH
 ;with c as (
 	select top 1 * from custmast where kcustnum = '{rechead.EBS_Customer_ID__c}' and custsnum = '000'
 )
-INSERT INTO wk_oed01_admin99999_88888 ([kdeleteflg],[oeptype],[oepordnum],[ktermid]                     ,[kbranch],            [key_3_a1],[kmfg],                       [kpart],[custpcl],  [custrcl],[custecl],[custlcl],[oepqtyord],  [oeqtyship], [pmdesc],         [iclocmain], [key_8_a1],                   [key_8_a101],[key_8_a102],[icstatus],[oepsell],    [oetrancode],[oetaxex],  [iccost],[pmcommod],[pmum],[kordnum],   [oefrexecpt],[oenetdtl],[oefactor],[icdlrcl],[iclocsec],[icqtyonord],[pmret],[eqpmeter],[eqpmeter01],[pmrep],[pmmcl],[pmpriceid],[artotal],[artotal01],[artotal02],[artotal03],[artotal04],[artotal05],[artotal06],[artotal07],[artotal08],[artotal09],[artotal10],[artotal11],[oeitemnum],[icbrchg],[dummy],[dummy01],[dummy02],[dummy03],[dummy04],[dummy05],[dummy06],[dummy07],[dummy08],[dummy09],[oerentot],[oerenthr],[oerentwk] ,[oerentday],[oerentmnth],[kmodel],[date1]                                          ,[apdateons],                                       [eqpigrp],[oecomplete],[action],[shift],[key_4_a1],[uprpromrt],[uprpromr01],[uprpromr02],[uprpromr03],[uprpromr04],[uprpromr05],[uprpromr06],[uprpromr07],[uprpromr08],[uprpromr09],[wonotes],[oeshipclas],[glco1],[glacct1],[glbr1],[gldpt1],[recnum], [recnum01],[recnum02],[recnum03],[recnum04],[recnum05],[recnum06],[recnum07],[recnum08],[recnum09],[key_10_a1],[key_10_a01],[key_10_a02],[key_10_a03],[key_10_a04],[key_10_a05],[key_10_a06],[key_10_a07],[key_10_a08],[key_10_a09],[key_2_a1],[key_2_a101],[key_2_a102],[key_2_a103],[key_2_a104],[key_2_a105],[key_2_a106],[key_2_a107],[key_2_a108],[key_2_a109],[amtlast],[amtlast01],[amtlast02],[amtlast03],[amtlast04],[amtlast05],[amtlast06],[amtlast07],[amtlast08],[amtlast09],[curractdt],[curractd01],[curractd02],[curractd03],[curractd04],[curractd05],[curractd06],[curractd07],[curractd08],[curractd09],[pmset])
-SELECT                                 'N'         ,'2'      ,1          ,'{rechead.EBS_Customer_ID__c}','{rechead.Branch__c}',''        ,'{p.Product_Group__c ?? ""}' ,'',     'c.custpcl','',       ''       ,''       ,{p.Quantity}, {p.Quantity},'{p.Description}',''          ,'{p.Product_Code__c ?? ""}'  ,''          ,''          ,''        ,{p.UnitPrice},''          ,c.custtaxbl,0       ,''        ,''    ,{newKordnum},''          ,''        ,''        ,''       ,'',        0           ,''     ,'0'       ,'0'         ,''     ,''     ,'0'        ,0        ,0          ,{linetotal},0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,{itemnum}  ,''       ,''     ,''       ,''       ,''       ,''       ,''       ,''       ,''       ,''       ,''       ,0         ,0         ,0          ,0          ,0           ,''     ,'{rechead.Date__c?.ToString("yyyyMMdd HH:mm:ss")}','{rechead.Date__c?.ToString("yyyyMMdd HH:mm:ss")}','',       ''          ,'2'     ,''     ,'R'       ,0           ,0           ,0          ,0           ,0           ,0           ,0           ,0           ,0           ,0           ,''       ,''          ,''     ,''       ,''     ,''      ,{itemnum},0         ,0         ,0         ,0         ,0         ,0         ,0         ,0         ,0         ,''         ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''        ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,0        ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,NULL       ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,'0'
+INSERT INTO wk_oed01_admin99999_88888 ([kdeleteflg],[oeptype],[oepordnum],[ktermid]                     ,[kbranch],            [key_3_a1],[kmfg],                       [kpart],[custpcl], [custrcl],[custecl],[custlcl],[oepqtyord],  [oeqtyship], [pmdesc],         [iclocmain], [key_8_a1],                   [key_8_a101],[key_8_a102],[icstatus],[oepsell],    [oetrancode],[oetaxex],  [iccost],[pmcommod],[pmum],[kordnum],   [oefrexecpt],[oenetdtl],[oefactor],[icdlrcl],[iclocsec],[icqtyonord],[pmret],[eqpmeter],[eqpmeter01],[pmrep],[pmmcl],[pmpriceid],[artotal],[artotal01],[artotal02],[artotal03],[artotal04],[artotal05],[artotal06],[artotal07],[artotal08],[artotal09],[artotal10],[artotal11],[oeitemnum],[icbrchg],[dummy],[dummy01],[dummy02],[dummy03],[dummy04],[dummy05],[dummy06],[dummy07],[dummy08],[dummy09],[oerentot],[oerenthr],[oerentwk] ,[oerentday],[oerentmnth],[kmodel],[date1]                                          ,[apdateons],                                       [eqpigrp],[oecomplete],[action],[shift],[key_4_a1],[uprpromrt],[uprpromr01],[uprpromr02],[uprpromr03],[uprpromr04],[uprpromr05],[uprpromr06],[uprpromr07],[uprpromr08],[uprpromr09],[wonotes],[oeshipclas],[glco1],[glacct1],[glbr1],[gldpt1],[recnum], [recnum01],[recnum02],[recnum03],[recnum04],[recnum05],[recnum06],[recnum07],[recnum08],[recnum09],[key_10_a1],[key_10_a01],[key_10_a02],[key_10_a03],[key_10_a04],[key_10_a05],[key_10_a06],[key_10_a07],[key_10_a08],[key_10_a09],[key_2_a1],[key_2_a101],[key_2_a102],[key_2_a103],[key_2_a104],[key_2_a105],[key_2_a106],[key_2_a107],[key_2_a108],[key_2_a109],[amtlast],[amtlast01],[amtlast02],[amtlast03],[amtlast04],[amtlast05],[amtlast06],[amtlast07],[amtlast08],[amtlast09],[curractdt],[curractd01],[curractd02],[curractd03],[curractd04],[curractd05],[curractd06],[curractd07],[curractd08],[curractd09],[pmset])
+SELECT                                 'N'         ,'2'      ,1          ,'{rechead.EBS_Customer_ID__c}','{rechead.Branch__c}',''        ,'{p.Product_Group__c ?? ""}' ,'',     c.custpcl, '',       ''       ,''       ,{p.Quantity}, {p.Quantity},'{p.Description}',''          ,'{p.Product_Code__c ?? ""}'  ,''          ,''          ,''        ,{p.UnitPrice},''          ,c.custtaxbl,0       ,''        ,''    ,{newKordnum},''          ,''        ,''        ,''       ,'',        0           ,''     ,'0'       ,'0'         ,''     ,''     ,'0'        ,0        ,0          ,{linetotal},0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,{itemnum}  ,''       ,''     ,''       ,''       ,''       ,''       ,''       ,''       ,''       ,''       ,''       ,0         ,0         ,0          ,0          ,0           ,''     ,'{rechead.Date__c?.ToString("yyyyMMdd HH:mm:ss")}','{rechead.Date__c?.ToString("yyyyMMdd HH:mm:ss")}','',       ''          ,'2'     ,''     ,'R'       ,0           ,0           ,0          ,0           ,0           ,0           ,0           ,0           ,0           ,0           ,''       ,''          ,''     ,''       ,''     ,''      ,{itemnum},0         ,0         ,0         ,0         ,0         ,0         ,0         ,0         ,0         ,''         ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''        ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,''          ,0        ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,0          ,NULL       ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,NULL        ,'0'
 FROM c
 ";
                 }
@@ -500,7 +557,7 @@ SET NOCOUNT OFF
             }
             else
             {
-                if (changeRecord.ChangeType == "CREATE" && string.IsNullOrEmpty(sfo.EBS_Customer_ID__c))
+                if ((changeRecord.ChangeType == "CREATE" || changeRecord.ChangeType == "UPDATE") && string.IsNullOrEmpty(sfo.EBS_Customer_ID__c))
                 {
                     sfAccount? sfacct = await _storageService.GetAccountByIdAsync(sfo.AccountId);
                     if (sfacct != null && string.IsNullOrEmpty(sfacct?.EBS_Customer_ID__c))
@@ -508,8 +565,6 @@ SET NOCOUNT OFF
                         try
                         {
                             string kcustnum = await _rawSql.ExecuteStoredProcedureScalarAsync<string>("dbo.sp_SF_AddCashCust",
-                                new SqlParameter("@custname", SqlDbType.VarChar, 40) { Value = (object?)sfacct?.Name ?? DBNull.Value },
-                                new SqlParameter("@custinsdt", SqlDbType.DateTime) { Value = DBNull.Value },
                                 new SqlParameter("@custname", SqlDbType.VarChar, 40) { Value = (object?)sfacct?.Name ?? DBNull.Value },
                                 new SqlParameter("@kcustnum", SqlDbType.VarChar, 8) { Value = "" },
                                 new SqlParameter("@kcustsrch", SqlDbType.VarChar, 10) { Value = DBNull.Value },
@@ -522,7 +577,7 @@ SET NOCOUNT OFF
                                 new SqlParameter("@custfax", SqlDbType.VarChar, 16) { Value = DBNull.Value },
                                 new SqlParameter("@custphone", SqlDbType.VarChar, 16) { Value = (object?)sfacct?.Phone ?? DBNull.Value },
                                 new SqlParameter("@custphon01", SqlDbType.VarChar, 16) { Value = DBNull.Value },
-                                new SqlParameter("@custslsmn", SqlDbType.VarChar, 3) { Value = DBNull.Value },
+                                new SqlParameter("@custslsmn", SqlDbType.VarChar, 3) { Value = (object?)sfo?.Rep_Number__c ?? DBNull.Value },
                                 new SqlParameter("@custstate", SqlDbType.VarChar, 2) { Value = (object?)sfacct?.BillingState ?? DBNull.Value },
                                 new SqlParameter("@custtxno", SqlDbType.VarChar, 12) { Value = DBNull.Value },
                                 new SqlParameter("@custzip", SqlDbType.VarChar, 10) { Value = (object?)sfacct?.BillingPostalCode ?? DBNull.Value },
@@ -531,7 +586,28 @@ SET NOCOUNT OFF
                                 new SqlParameter("@custinsamt", SqlDbType.Float) { Value = 0.0 },
                                 new SqlParameter("@custinsdt", SqlDbType.DateTime) { Value = DBNull.Value }
                             ) ?? "";
+                            if (!string.IsNullOrEmpty(kcustnum))
+                            {
+                                sfo.EBS_Customer_ID__c = kcustnum;
+                                sfacct.EBS_Customer_ID__c = kcustnum;
+                                await SetEbsCustomerIdAsync("Account", sfacct!.Id, kcustnum);
+                                await SetEbsCustomerIdAsync("Quote", sfo.Id, kcustnum);
+                            }
+                            else
+                            {
+                                Log.Warning($"sp_SF_AddCashCust returned empty kcustnum for account {sfacct?.Id} — skipping Salesforce writeback");
+                            }
+
                             Log.Information($"Created/updated EBS customer {kcustnum} for account {sfacct?.Id}");
+                            await _storageService.InsertNotification(new sfProcessingNotification
+                            {
+                                EventType = "EBS_Customer_Created",
+                                RecordId = sfo.Id,
+                                Title = "EBS Customer Created",
+                                Body = $"Created EBS customer number {kcustnum} for account \"{sfacct?.Name}\"",
+                                Payload = "",
+                                CreatedAt = DateTime.UtcNow
+                            });
                         }
                         catch (Exception ex)
                         {
@@ -1180,7 +1256,7 @@ EXEC msdb.dbo.startjob @job = 'SF_MOBILE653_Reservation'
                 }
             }
 
-            Log.Information($"Sent custom notification '{title}' to {recipientIds.Count} recipient(s)");
+            Log.Information($"Sent notification '{title}' to: {string.Join(", ",recipientIds)}");
             return results;
         }
         catch (Exception ex) when (ex is not Exception { Message: var m } || !m.StartsWith("SendCustomNotification failed"))

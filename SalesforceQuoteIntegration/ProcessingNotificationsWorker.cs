@@ -5,13 +5,16 @@ public class ProcessingNotificationsWorker : BackgroundService
 {
     private readonly RawSqlService _rawSql;
     private readonly SalesforceQueryService _queryService;
+    private readonly QuoteStorageService _storageService;
 
     public ProcessingNotificationsWorker(
         RawSqlService rawSql,
-        SalesforceQueryService queryService)
+        SalesforceQueryService queryService,
+        QuoteStorageService storageService)
     {
         _rawSql = rawSql;
         _queryService = queryService;
+        _storageService = storageService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -54,9 +57,20 @@ FROM sfProcessingNotifications WHERE IsProcessed = 0 ORDER BY CreatedAt
     {
         List<string> r = new List<string>();
         r = await _queryService.GetGroupMembers("QuoteNotifications");
-        if (r.Count == 0) 
+        if (!r.Contains("005O100000SlPxKIAV")) //r.Count == 0
         {
-            r.Add("005O100000SlPxKIAV"); //asheranko
+            //r.Add("005O100000SlPxKIAV"); //asheranko
+        }
+        if (recordId != "")
+        {
+            var quote = await _storageService.GetQuoteByIdAsync(recordId);
+            if (quote != null && !string.IsNullOrEmpty(quote.LastModifiedById))
+            {
+                if (!r.Contains(quote.LastModifiedById))
+                {
+                    r.Add(quote.LastModifiedById);
+                }
+            }
         }
         await _queryService.SendCustomNotificationAsync(
             customNotifTypeId: eventType,

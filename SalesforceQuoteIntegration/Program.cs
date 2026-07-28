@@ -388,7 +388,7 @@ BEGIN
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
     SET NOCOUNT OFF
-END'
+END
 "},
         {"sfProcessingQueue", @$"
 IF OBJECT_ID('sfProcessingQueue', 'U') IS NULL
@@ -439,8 +439,9 @@ BEGIN
 				@branch = left(q.Branch__c, 3),
 				@status = q.Status
 			from sfQuoteLineItem 
+			cross apply (select top 1 Family from sfProduct2 where sfQuoteLineItem.Product2Id = Id) p
 			cross apply (select top 1 Name, Status, Branch__c from sfQuote where sfQuoteLineItem.QuoteId = Id) q
-			where Id = @lineId
+			where Id = @lineId and p.Family <> 'Service Charges' and p.Family <> 'Misc Charges'
 			
 			declare @currentequips table (kequipnum varchar(max), rownum int)
 			insert into @currentequips SELECT value, ROW_NUMBER() OVER(ORDER BY (SELECT 0)) as rownum FROM STRING_SPLIT(NULLIF(@ids,''), ',')
@@ -508,6 +509,14 @@ BEGIN
 				IF ISNULL(@ids,'') <> @ret
 					INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body)
 						SELECT 'Equip_Status_Updated', @qid, N'EBS Equip Status Updated', N'Equipment status set to ""RE"" for: '+REPLACE(@ret,',',', ')
+
+				if ((select count(*) from @tbl) < @qty) --Failed to find enough available equipment for group/product 
+				BEGIN
+					declare @pname nvarchar(500) = N''
+					select @pname = Name from sfProduct2 where Id = @pid
+					INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body)
+						SELECT 'Equip_Status_Updated', @qid, N'EBS Equip Unavailable', N'Could not find enough available equipment in EBS to reserve for the requested quantity. Product: '+@pname
+				END
 			end
 			else if (@steps < 0)
 			begin
