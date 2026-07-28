@@ -663,4 +663,9 @@ public class QuoteStorageService
         await using var db = await _dbContextFactory.CreateDbContextAsync();
         return await db.sfProduct2.FirstOrDefaultAsync(q => q.Id == productId);
     }
+    public async Task<sfAccount?> GetAccountByIdAsync(string accountId)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync();
+        return await db.sfAccount.FirstOrDefaultAsync(q => q.Id == accountId);
+    }
 }

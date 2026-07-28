@@ -482,17 +482,44 @@ SET NOCOUNT OFF
             var quote = results[0];
             Log.Information($"OnQuoteChanged: Quote {changeRecord.SalesforceRecordId} | Status: {quote["Status"]} | Total: {quote["TotalPrice"]}");
 
-            sfQuote sfo;
+            sfQuote? sfo = null;
             try
             {
                 sfo = quote.ToObject<sfQuote>()!;
-                await _storageService.SaveQuote(sfo);
-                Log.Information($"Saved {sfo.GetType().Name} {changeRecord.SalesforceRecordId} to database");
             }
             catch (Exception ex)
             {
                 Log.Error(ex, $"Failed to deserialize sfQuote {changeRecord.SalesforceRecordId}");
+                return;
             }
+            if (sfo == null)
+            {
+                Log.Error($"sfQuote object is null for quote {changeRecord.SalesforceRecordId}");
+                return;
+            }
+            else
+            {
+                if (changeRecord.ChangeType == "CREATE" && string.IsNullOrEmpty(sfo.EBS_Customer_ID__c))
+                {
+                    sfAccount? sfacct = await _storageService.GetAccountByIdAsync(sfo.AccountId);
+                    if (sfacct != null && string.IsNullOrEmpty(sfacct?.EBS_Customer_ID__c))
+                    {
+                        int custmastId = await _rawSql.ExecuteStoredProcedureScalarAsync<int>("dbo.sp_SF_AddCashCust",
+                            new SqlParameter("@custname", sfacct?.Name)
+                        );
+                    }
+                }
+                try
+                {
+                    await _storageService.SaveQuote(sfo);
+                    Log.Information($"Saved {sfo.GetType().Name} {changeRecord.SalesforceRecordId} to database");
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, $"Failed to save sfQuote {changeRecord.SalesforceRecordId}");
+                }
+            }
+
 
             //RYAN - compare server line items to local in case anything has changed and we missed the event
             //   ONLY if ChangeType is UPDATE... and only if ChangeFields contains "STATUS"
@@ -534,6 +561,10 @@ SET NOCOUNT OFF
                 {
                     Log.Error(ex, $"Failed to retrieve quote line items for sfQuote {changeRecord.SalesforceRecordId}");
                 }
+            }
+            else if (changeRecord.ChangeType == "CREATE")
+            {
+
             }
 
             bool bKeepProcessing = true;
