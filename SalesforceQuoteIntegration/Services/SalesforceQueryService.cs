@@ -218,11 +218,12 @@ where p.Id = '{pr.Id}'
                             {
                                 foreach (var kequip in reservedIds)
                                 {
-                                    pr.ProductCode = kequip;
-                                    pr.QuoteLineItemId = line.Id;
-                                    pr.UnitPrice = line.UnitPrice;
-                                    pr.Quantity = (decimal)1.0;
-                                    products2.Add(pr);
+                                    sfProduct2custom prtemp = _mapper.Map<sfProduct2custom>(prd);
+                                    prtemp.ProductCode = kequip;
+                                    prtemp.QuoteLineItemId = line.Id;
+                                    prtemp.UnitPrice = line.UnitPrice;
+                                    prtemp.Quantity = (decimal)1.0;
+                                    products2.Add(prtemp);
                                     Log.Information($"Using previously reserved equipment id {kequip} for quote {chrec.Name} ({chrec.SalesforceRecordId})");
                                 }
                             }
