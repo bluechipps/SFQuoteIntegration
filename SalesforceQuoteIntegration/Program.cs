@@ -110,7 +110,27 @@ try
     //    Log.Information($"Database migrations applied successfully");
     //}
 
-    // Apply stored procedure scripts on startup
+    /*
+{"trg_oehead_ProcessingComplete", @$"
+CREATE OR ALTER TRIGGER trg_oehead_ProcessingComplete
+ON oehead
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF UPDATE(kswoseg)
+    BEGIN
+        INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body, Payload)
+			SELECT 'Order_Created', q.Id, N'Order Created', N'Order number '+cast(i.kordnum as nvarchar(max))+' has been created in EBS.',
+				   (SELECT i.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+			FROM inserted i
+			INNER JOIN deleted d ON i.kordnum = d.kordnum and i.kbranch = d.kbranch
+			cross apply( select top 1 Id from sfQuote where kordnum = i.kordnum and Branch__c = i.kbranch ) q
+			WHERE i.kswoseg = 0 AND d.kswoseg = -999;
+    END
+END
+"}
+	*/
     Dictionary<string, string> spdefs = new()
     {
         { "sp_ebs_rental_pricing", @$"
@@ -593,25 +613,6 @@ BEGIN
 		ProcessedAt DATETIME2 NULL
 	)
 	CREATE INDEX IX_sfProcessingNotifications_IsProcessed ON sfProcessingNotifications(IsProcessed, CreatedAt);
-END
-"},
-        {"trg_oehead_ProcessingComplete", @$"
-CREATE OR ALTER TRIGGER trg_oehead_ProcessingComplete
-ON oehead
-AFTER UPDATE
-AS
-BEGIN
-    SET NOCOUNT ON;
-    IF UPDATE(kswoseg)
-    BEGIN
-        INSERT INTO sfProcessingNotifications (EventType, RecordId, Title, Body, Payload)
-			SELECT 'Order_Created', q.Id, N'Order Created', N'Order number '+cast(i.kordnum as nvarchar(max))+' has been created in EBS.',
-				   (SELECT i.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
-			FROM inserted i
-			INNER JOIN deleted d ON i.kordnum = d.kordnum and i.kbranch = d.kbranch
-			cross apply( select top 1 Id from sfQuote where kordnum = i.kordnum and Branch__c = i.kbranch ) q
-			WHERE i.kswoseg = 0 AND d.kswoseg = -999;
-    END
 END
 "}
     };
