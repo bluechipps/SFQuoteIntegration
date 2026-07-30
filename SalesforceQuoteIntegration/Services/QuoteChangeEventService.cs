@@ -16,6 +16,7 @@ public class QuoteChangeEventService
     private readonly SalesforceQueryService _queryService;
     private BayeuxClient? _bayeuxClient;
 
+    private volatile bool _reconnectRequested = false;
     private DateTime _lastConnectAt = DateTime.UtcNow;
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromMinutes(2);
     private const string ApiVersion = "59.0";
@@ -77,6 +78,7 @@ public class QuoteChangeEventService
         _bayeuxClient.AddExtension(new ReplayExtension());
 
         _lastConnectAt = DateTime.UtcNow;
+        _reconnectRequested = false;
         _bayeuxClient.GetChannel("/meta/handshake").AddListener(new MetaHandshakeListener());
         _bayeuxClient.GetChannel("/meta/connect").AddListener(new MetaConnectListener(this));
         _bayeuxClient.GetChannel("/meta/subscribe").AddListener(new MetaSubscribeListener(this));
@@ -102,14 +104,32 @@ public class QuoteChangeEventService
             channel.Subscribe(new ChangeEventListener(entityType, _storageService, _queryService));
         }
 
+        //while (!cancellationToken.IsCancellationRequested)
+        //{
+        //    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+        //    var timeSinceLastConnect = DateTime.UtcNow - _lastConnectAt;
+
+        //    if (_lastConnectAt == DateTime.MinValue)
+        //    {
+        //        Log.Warning("Reconnecting due to 403::Unknown client (session invalidated)");
+        //        break;
+        //    }
+        //    if (timeSinceLastConnect > ConnectTimeout)
+        //    {
+        //        Log.Warning($"No /meta/connect heartbeat for {timeSinceLastConnect.TotalMinutes:F1} minutes — reconnecting");
+        //        break;
+        //    }
+
+        //    await RefreshTokenIfNeededAsync();
+        //}
         while (!cancellationToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             var timeSinceLastConnect = DateTime.UtcNow - _lastConnectAt;
 
-            if (_lastConnectAt == DateTime.MinValue)
+            if (_reconnectRequested)
             {
-                Log.Warning("Reconnecting due to 403::Unknown client (session invalidated)");
+                Log.Warning("Reconnecting due to session invalidation / stale replay");
                 break;
             }
             if (timeSinceLastConnect > ConnectTimeout)
@@ -118,7 +138,7 @@ public class QuoteChangeEventService
                 break;
             }
 
-            await RefreshTokenIfNeededAsync();
+            //await RefreshTokenIfNeededAsync();
         }
 
         try
@@ -141,7 +161,7 @@ public class QuoteChangeEventService
         {
             var (newToken, _) = await _authService.GetTokenAsync();
             _bayeuxClient?.SetAttribute("Authorization", $"Bearer {newToken}");
-            Log.Debug($"Salesforce token refreshed successfully");
+            //Log.Debug($"Salesforce token refreshed successfully");
         }
         catch (Exception ex)
         {
@@ -182,12 +202,13 @@ public class QuoteChangeEventService
 
             var error = message.ContainsKey("error") ? message["error"]?.ToString() ?? "" : "";
             var subscription = message["subscription"]?.ToString() ?? "";
-
+            
             if (error.Contains("replayId") && error.Contains("invalid"))
             {
                 Log.Warning($"Replay ID for {subscription} is stale — resubscribing from -2");
                 _parent._channelsNeedingReplayReset.Add(subscription);
-                _parent._lastConnectAt = DateTime.MinValue;  // trigger reconnect loop
+                //_parent._lastConnectAt = DateTime.MinValue;  // trigger reconnect loop
+                _parent._reconnectRequested = true;
             }
             else
             {
@@ -216,7 +237,9 @@ public class QuoteChangeEventService
                 if (error != null && error.Contains("403"))
                 {
                     Log.Warning("CometD session invalidated — flagging for reconnect");
-                    _parent._lastConnectAt = DateTime.MinValue;
+                    _parent._reconnectRequested = true;
+                    _parent._authService.InvalidateToken();
+                    //_parent._lastConnectAt = DateTime.MinValue;
                 }
                 // Do NOT update _lastConnectAt to UtcNow on a failed connect —
                 // otherwise the health loop mistakes failed polls for healthy heartbeats.
