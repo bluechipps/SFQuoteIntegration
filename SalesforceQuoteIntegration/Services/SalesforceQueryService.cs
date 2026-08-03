@@ -28,6 +28,19 @@ public class SalesforceQueryService
 
     private readonly Dictionary<string, List<string>> _groupMembers = new();
 
+    SortedList<string, int> _statuses = new SortedList<string, int> {
+        { "Draft", 1 },
+        { "Needs Review", 2 },
+        { "In Review", 3 },
+        { "Approved", 4 },
+        { "Rejected", 5 },
+        { "Presented", 6 },
+        { "Accepted", 7 },
+        { "Denied", 8 }
+    };
+
+    public SortedList<string, int> Statuses { get => _statuses; set => _statuses = value; }
+
     public SalesforceQueryService(
         SalesforceAuthService authService,
         QuoteStorageService storageService,
@@ -261,7 +274,7 @@ where p.Id = '{pr.Id}'
                             //RYAN - TODO - alert user
                             kequipnum = "";
                             products2.Add(pr);
-                            Log.Error($"Service charge pricing not found for quote {chrec.Name} ({chrec.SalesforceRecordId})");
+                            Log.Error($"Service charge pricing not found for product \"{pr.Description}\" on quote {chrec.Name} ({chrec.SalesforceRecordId})");
                             await _storageService.MarkAsProcessedAsync(chrec.Id, error: $"Service charge pricing not found for quote {chrec.Name} ({chrec.SalesforceRecordId})");
                             return true;
                         }
@@ -567,6 +580,8 @@ SET NOCOUNT OFF
             var quote = results[0];
             Log.Information($"OnQuoteChanged: Quote {changeRecord.SalesforceRecordId} | Status: {quote["Status"]} | Total: {quote["TotalPrice"]}");
 
+            string prevstatus = $"";
+            sfQuote? rechead = null;
             sfQuote? sfo = null;
             try
             {
@@ -645,6 +660,12 @@ SET NOCOUNT OFF
                 }
                 try
                 {
+                    rechead = await _storageService.GetQuoteByIdAsync(changeRecord.SalesforceRecordId);
+                    if (rechead != null)
+                    {
+                        prevstatus = $"{rechead.Status ?? ""}";
+                    }
+
                     await _storageService.SaveQuote(sfo);
                     Log.Information($"Saved {sfo.GetType().Name} {changeRecord.SalesforceRecordId} to database");
                 }
@@ -657,16 +678,29 @@ SET NOCOUNT OFF
 
             //RYAN - compare server line items to local in case anything has changed and we missed the event
             //   ONLY if ChangeType is UPDATE... and only if ChangeFields contains "STATUS"
+            
             if (changeRecord.ChangeType == "UPDATE" && (changeRecord.ChangedFields ?? "").Contains("Status"))
             {
 
+                if (_statuses.ContainsKey($"{changeRecord.Status}") && 
+                    _statuses[prevstatus] > _statuses[$"{changeRecord.Status}"] &&
+                    _statuses[prevstatus] > _statuses["In Review"]) 
+                {
+                    // unreserve
+                }
+                else if (_statuses.ContainsKey($"{changeRecord.Status}") &&
+                    _statuses[prevstatus] < _statuses[$"{changeRecord.Status}"] &&
+                    _statuses[prevstatus] < _statuses["Approved"])
+                {
+                    // reserve
+                }
                 try
                 {
                     List<JObject> qliresults = [];
                     qliresults = await QueryAsync(
         $@"SELECT Id, IsDeleted, LineNumber, CreatedDate, CreatedById, LastModifiedDate, LastModifiedById, SystemModstamp, LastViewedDate, LastReferencedDate, QuoteId, PricebookEntryId, OpportunityLineItemId, Quantity, UnitPrice, Discount, Description, ServiceDate, Product2Id, SortOrder, ListPrice, Subtotal, TotalPrice, ProductID__c, SerialNumber__c, UID__c, Inventory__c
-                   FROM QuoteLineItem
-                   WHERE QuoteId = '{changeRecord.SalesforceRecordId}'");
+                FROM QuoteLineItem
+                WHERE QuoteId = '{changeRecord.SalesforceRecordId}'");
 
                     if (qliresults.Count == 0)
                     {
